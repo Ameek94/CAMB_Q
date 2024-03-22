@@ -845,18 +845,18 @@
     atol = this%atol
     initial_phidot =  astart*this%phidot_start(initial_phi)
     om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
-    write (*,*) 'checking if need to adjust input V0 = ',this%V0
-    write(*,*) 'Omega_DE from scalar field IC = ',om1
-    write(*,*) 'Omega_DE required = ',this%State%Omega_de
+    ! write (*,*) 'checking if need to adjust input V0 = ',this%V0
+    ! write(*,*) 'Omega_DE from scalar field IC = ',om1
+    ! write(*,*) 'Omega_DE required = ',this%State%Omega_de
     if (abs(om1-this%State%Omega_de)>this%omega_tol) then
         OK = .false.
-        write (*,*) 'initial scf values do not give correct field evolution, adjusting V0, diff = ', abs(om1-this%State%Omega_de)
+        ! write (*,*) 'initial scf values do not give correct field evolution, adjusting V0, diff = ', abs(om1-this%State%Omega_de)
         do iter=1,100 ! this method works but we can make our search more robust by using the BOBYQA or NEWUOA minimizers
             logV0_in = log10(this%V0)
             this%V0 = 10**(0.5_dl * log10(this%State%Omega_de/om1) + logV0_in)
             om1 = this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
-            write (*,*) 'new V0 = ',this%V0
-            write(*,*) 'diff Omega_DE = ', abs(om1-this%State%Omega_de)
+            ! write (*,*) 'new V0 = ',this%V0
+            ! write(*,*) 'diff Omega_DE = ', abs(om1-this%State%Omega_de)
             if (abs(om1-this%State%Omega_de)>this%omega_tol) then
                 OK = .false.
             else
@@ -865,9 +865,9 @@
             end if
         end do
         write(*,*) 'Search for new V0 converged = ',OK
-        write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
-        write (*,'(A, ES10.2)') 'new V0 = ',this%V0
-        write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1
+        ! write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
+        ! write (*,'(A, ES10.2)') 'new V0 = ',this%V0
+        ! write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1
         ! amk - DO WE NEED TO CHANGE this%State%Omega_de to the new value
     else
         OK = .true.
