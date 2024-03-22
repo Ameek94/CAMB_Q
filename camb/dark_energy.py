@@ -217,5 +217,38 @@ class EarlyQuintessence(Quintessence):
             self.fde_zc = fde_zc
 
 
+@fortran_class
+class EarlyQuintessenceAS(Quintessence):
+    r"""
+    Example early quintessence (axion-like, as arXiv:1908.06995) with potential
+
+     V(\phi) = m^2f^2 (1 - cos(\phi/f))^n + \Lambda_{cosmological constant}
+
+    """
+
+    _fields_ = [
+        ("n", c_double, "lambda for the exponential potential"),
+        ("V0", c_double, "Overall potential amplitude "
+                        "only used for tuning the"),
+        ("theta_i", c_double, "phi/f initial field value"),
+        ("frac_lambda0", c_double, "fraction of dark energy in cosmological constant today (approximated as 1)"),
+        ("use_zc", c_bool, "solve for f, m to get specific critical reshift zc and fde_zc"),
+        ("zc", c_double, "reshift of peak fractional early dark energy density"),
+        ("fde_zc", c_double, "fraction of early dark energy density to total at peak"),
+        ("npoints", c_int, "number of points for background integration spacing"),
+        ("min_steps_per_osc", c_int, "minimumum number of steps per background oscillation scale"),
+        ("fde", AllocatableArrayDouble, "after initialized, the calculated background early dark energy "
+                                        "fractions at sampled_a"),
+        ("__ddfde", AllocatableArrayDouble)
+    ]
+    _fortran_class_name_ = 'TEarlyQuintessenceAS'
+
+    def set_params(self, n, V0=1e-10, theta_i=0.0,frac_lambda0=0.,use_zc=False):
+        self.n = n
+        self.V0 = V0
+        self.theta_i = theta_i
+        self.frac_lambda0 = frac_lambda0
+        self.use_zc = use_zc
+
 # short names for models that support w/wa
 F2003Class._class_names.update({'fluid': DarkEnergyFluid, 'ppf': DarkEnergyPPF})

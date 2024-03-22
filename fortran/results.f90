@@ -262,6 +262,7 @@
     procedure :: get_lmax_lensed => CAMBdata_get_lmax_lensed
     procedure :: get_zstar => CAMBdata_get_zstar
     procedure :: DarkEnergyStressEnergy => CAMBdata_DarkEnergyStressEnergy
+    procedure :: DarkEnergyPhiPhidot => CAMBdata_DarkEnergyPhiPhidot
     procedure :: SetParams => CAMBdata_SetParams
     procedure :: Free => CAMBdata_Free
     procedure :: grho_no_de
@@ -1066,6 +1067,17 @@
     grhov_t = grhov_t/a**2
 
     end subroutine CAMBdata_DarkEnergyStressEnergy
+
+    subroutine CAMBdata_DarkEnergyPhiPhidot(this, a, phi,phidot, n) ! added for phiphidot output
+    class(CAMBdata) :: this
+    integer, intent(in) :: n
+    real(dl), intent(in) :: a(n)
+    real(dl), intent(out) :: phi(n), phidot(n)
+    integer i
+    do i=1, n
+        call this%CP%DarkEnergy%ValsAta(a(i), phi(i), phidot(i))
+    end do
+    end subroutine CAMBdata_DarkEnergyPhiPhidot
 
     function rofChi(this,Chi) !sinh(chi) for open, sin(chi) for closed.
     class(CAMBdata) :: this

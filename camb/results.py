@@ -212,6 +212,7 @@ class CAMBdata(F2003Class):
                  ('RedshiftAtTimeArr', [numpy_1d, numpy_1d, int_arg]),
                  ('CosmomcTheta', [], c_double),
                  ('DarkEnergyStressEnergy', [numpy_1d, numpy_1d, numpy_1d, int_arg]),
+                 ('DarkEnergyPhiPhidot', [numpy_1d, numpy_1d, numpy_1d, int_arg]), # added for phiphidot output
                  ('get_lmax_lensed', [], c_int),
                  ('get_zstar', [d_arg], c_double),
                  ('SetParams', [POINTER(CAMBparams), int_arg, int_arg, int_arg, int_arg])
@@ -674,6 +675,24 @@ class CAMBdata(F2003Class):
             return rho[0], w[0]
         else:
             return rho, w
+        
+    def get_dark_energy_phi_phidot(self, a): # added for phiphidot output
+        r"""
+        For Quintessence models, get scalar field phi,phidot
+        :param a: scalar factor or array of scale factors
+        :return: phi,phidot arrays at redshifts :math:`1/a-1` [or scalars if :math:`a` is scalar]
+        """
+        if np.isscalar(a):
+            scales = np.array([a])
+        else:
+            scales = np.ascontiguousarray(a)
+        phi = np.zeros(scales.shape)
+        phidot = np.zeros(scales.shape)
+        self.f_DarkEnergyPhiPhidot(scales, phi, phidot, byref(c_int(len(scales))))
+        if np.isscalar(a):
+            return phi[0], phidot[0]
+        else:
+            return phi, phidot
 
     def get_Omega(self, var, z=0):
         r"""

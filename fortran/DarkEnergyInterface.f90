@@ -21,6 +21,7 @@
     procedure :: w_de
     procedure :: grho_de
     procedure :: Effective_w_wa !Used as approximate values for non-linear corrections
+    procedure :: ValsAta !get phi and phi' at scale factor a, e.g. by interpolation in precomputed table, only wors for Quintessence models which must override this in subclass ! added for phiphidot output
     end type TDarkEnergyModel
 
     type, extends(TDarkEnergyModel) :: TDarkEnergyEqnOfState
@@ -62,6 +63,15 @@
     grho_de =0._dl
 
     end function grho_de
+
+    subroutine ValsAta(this,a,aphi,aphidot) ! added for phiphidot output
+    class(TDarkEnergyModel) :: this
+    !Do interpolation for background phi and phidot at a (precomputed in Init)
+    real(dl) a, aphi, aphidot
+    call MpiStop('Quintessence classes must override to provide Phi(a),Phidot(a)')
+    aphi = 0
+    aphidot = 0
+    end subroutine ValsAta
 
     subroutine PrintFeedback(this, FeedbackLevel)
     class(TDarkEnergyModel) :: this

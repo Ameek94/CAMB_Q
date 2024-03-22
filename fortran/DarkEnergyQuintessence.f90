@@ -32,7 +32,7 @@
     ! initial conditions and interpolation tables
     type, extends(TDarkEnergyModel) :: TQuintessence
         integer :: DebugLevel = 0 !higher then zero for some debug output to console
-        real(dl) :: astart = 1e-7_dl
+        real(dl) :: astart = 1e-8_dl
         real(dl) :: integrate_tol = 1e-6_dl
         real(dl), dimension(:), allocatable :: sampled_a, phi_a, phidot_a
         ! Steps for log a and linear spacing, switching at max_a_log (set by Init)
@@ -49,6 +49,7 @@
     procedure :: BackgroundDensityAndPressure => TQuintessence_BackgroundDensityAndPressure
     procedure :: EvolveBackground
     procedure :: EvolveBackgroundLog
+    procedure :: GetOmegaFromInitial
     procedure, private :: phidot_start => TQuintessence_phidot_start
     end type TQuintessence
 
@@ -76,12 +77,36 @@
     procedure, private :: fde_peak
     procedure, private :: check_error
     procedure :: calc_zc_fde
-
     end type TEarlyQuintessence
+
+    type, extends(TQuintessence) :: TEarlyQuintessenceAS ! adding a new class for the pure exponential potential
+        real(dl) :: n = 0.5_dl
+        real(dl) :: V0 = 1e-10 !m in reduced Planck mass units
+        real(dl) :: theta_i = 0._dl !initial value of phi/f
+        real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
+        logical :: use_zc = .false. !adjust m to fit zc
+        real(dl) :: zc, fde_zc !readshift for peak f_de and f_de at that redshift
+        integer :: npoints = 6000 !baseline number of log a steps; will be increased if needed when there are oscillations
+        real(dl) :: omega_tol = 1d-4 !tolerance for OmegaDE
+        real(dl) :: atol = 1e-8_dl
+        integer :: min_steps_per_osc = 10
+        real(dl), dimension(:), allocatable :: fde, ddfde
+    contains
+    procedure :: Vofphi => TEarlyQuintessenceAS_VofPhi
+    procedure :: Init => TEarlyQuintessenceAS_Init
+    procedure :: ReadParams =>  TEarlyQuintessenceAS_ReadParams
+    procedure, nopass :: PythonClass => TEarlyQuintessenceAS_PythonClass
+    procedure, nopass :: SelfPointer => TEarlyQuintessenceAS_SelfPointer
+    ! procedure, private :: fdeAtaAS
+    ! procedure, private :: fde_peakAS
+    procedure, private :: check_errorAS
+    ! procedure :: calc_zc_fdeAS
+
+    end type TEarlyQuintessenceAS
 
     procedure(TClassDverk) :: dverk
 
-    public TQuintessence, TEarlyQuintessence
+    public TQuintessence, TEarlyQuintessence,TEarlyQuintessenceAS
     contains
 
     function VofPhi(this, phi, deriv)
@@ -297,7 +322,6 @@
 
     end function TEarlyQuintessence_VofPhi
 
-
     subroutine TEarlyQuintessence_Init(this, State)
     use Powell
     class(TEarlyQuintessence), intent(inout) :: this
@@ -439,6 +463,9 @@
     !    if (.not. OK) stop 'Search for good intial conditions did not converge' !this shouldn't happen
     !
     !end if !Find initial
+
+    write (*,'(A, 2ES10.2)') 'Initial values received for m,n = ', this%m,this%n
+    write(*,*) 'Omega_DE required = ',this%State%Omega_de
 
     initial_phi = this%theta_i*this%f
 
@@ -748,22 +775,432 @@
     end subroutine TEarlyQuintessence_SelfPointer
 
 
-    !real(dl) function GetOmegaFromInitial(this, astart,phi,phidot,atol)
-    !!Get omega_de today given particular conditions phi and phidot at a=astart
-    !class(TQuintessence) :: this
-    !real(dl), intent(IN) :: astart, phi,phidot, atol
-    !integer, parameter ::  NumEqs=2
-    !real(dl) c(24),w(NumEqs,9), y(NumEqs), ast
-    !integer ind, i
-    !
-    !ast=astart
-    !ind=1
-    !y(1)=phi
-    !y(2)=phidot*astart**2
-    !call dverk(this,NumEqs,EvolveBackground,ast,y,1._dl,atol,ind,c,NumEqs,w)
-    !call EvolveBackground(this,NumEqs,1._dl,y,w(:,1))
-    !
-    !GetOmegaFromInitial=(0.5d0*y(2)**2 + Vofphi(y(1),0))/this%State%grhocrit !(3*adot**2)
-    !
-    !end function GetOmegaFromInitial
+
+    !------------Exponential Potential Functions-------------!
+
+    function TEarlyQuintessenceAS_VofPhi(this, phi, deriv) result(VofPhi)
+    !The input variable phi is sqrt(8*Pi*G)*psi
+    !Returns (8*Pi*G)^(1-deriv/2)*d^{deriv}V(psi)/d^{deriv}psi evaluated at psi
+    !return result is in 1/Mpc^2 units [so times (Mpc/c)^2 to get units in 1/Mpc^2]
+    class(TEarlyQuintessenceAS) :: this
+    real(dl) phi,Vofphi
+    integer deriv
+    real(dl) theta
+    real(dl), parameter :: units = MPC_in_sec**2 /Tpl**2  !convert to units of 1/Mpc^2
+
+    ! Assume f = sqrt(kappa)*f_theory = f_theory/M_pl
+    ! m = m_theory/M_Pl
+    theta = phi
+    if (deriv==0) then
+        Vofphi = this%V0*exp(-this%n*theta) + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
+    else if (deriv ==1) then
+        Vofphi = -this%V0*this%n*exp(-this%n*theta) !units*this%m**2*this%f*this%n*(1 - cos(theta))**(this%n-1)*sin(theta)
+    else if (deriv ==2) then
+        Vofphi = this%V0*this%n**2*exp(-this%n*theta)
+    end if
+    end function TEarlyQuintessenceAS_VofPhi
+
+    subroutine TEarlyQuintessenceAS_Init(this, State)
+    use Powell
+    class(TEarlyQuintessenceAS), intent(inout) :: this
+    class(TCAMBdata), intent(in), target :: State
+    real(dl) aend, afrom
+    integer, parameter ::  NumEqs=2
+    real(dl) c(24),w(NumEqs,9), y(NumEqs)
+    integer ind, i, ix
+    real(dl), parameter :: splZero = 0._dl
+    real(dl) lastsign, da_osc, last_a, a_c
+    real(dl) initial_phi, initial_phidot, a2, logV0_in, om,om1,om2,atol,astart
+    real(dl), dimension(:), allocatable :: sampled_a, phi_a, phidot_a, fde
+    integer npoints, tot_points, max_ix
+    logical has_peak, OK
+    real(dl) fzero, xzero
+    integer iflag, iter
+    Type(TTimer) :: Timer
+    Type(TNEWUOA) :: Minimize
+    real(dl) log_params(2), param_min(2), param_max(2)
+
+    !Make interpolation table, etc,
+    !At this point massive neutrinos have been initialized
+    !so grho_no_de can be used to get density and pressure of other components at scale factor a
+
+    call this%TQuintessence%Init(State)
+
+    this%dloga = (-this%log_astart)/(this%npoints-1)
+
+    !use log spacing in a up to max_a_log, then linear. Switch where step matches
+    this%max_a_log = 1.d0/this%npoints/(exp(this%dloga)-1)
+    npoints = (log(this%max_a_log)-this%log_astart)/this%dloga + 1
+
+    if (allocated(this%phi_a)) then
+        deallocate(this%phi_a,this%phidot_a)
+        deallocate(this%ddphi_a,this%ddphidot_a, this%sampled_a)
+    end if
+    allocate(phi_a(npoints),phidot_a(npoints), sampled_a(npoints), fde(npoints))
+
+    write (*,'(A, 2ES10.2)') 'Initial values received for V0,n = ', this%V0,this%n ! just for testing 
+
+    initial_phi = this%theta_i
+    astart = this%astart
+    atol = this%atol
+    initial_phidot =  astart*this%phidot_start(initial_phi)
+    om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
+    write (*,*) 'checking if need to adjust input V0 = ',this%V0
+    write(*,*) 'Omega_DE from scalar field IC = ',om1
+    write(*,*) 'Omega_DE required = ',this%State%Omega_de
+    if (abs(om1-this%State%Omega_de)>this%omega_tol) then
+        OK = .false.
+        write (*,*) 'initial scf values do not give correct field evolution, adjusting V0, diff = ', abs(om1-this%State%Omega_de)
+        do iter=1,100 ! this method works but we can make our search more robust by using the BOBYQA or NEWUOA minimizers
+            logV0_in = log10(this%V0)
+            this%V0 = 10**(0.5_dl * log10(this%State%Omega_de/om1) + logV0_in)
+            om1 = this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
+            write (*,*) 'new V0 = ',this%V0
+            write(*,*) 'diff Omega_DE = ', abs(om1-this%State%Omega_de)
+            if (abs(om1-this%State%Omega_de)>this%omega_tol) then
+                OK = .false.
+            else
+                OK = .true.
+                exit
+            end if
+        end do
+        write(*,*) 'Search for new V0 converged = ',OK
+        write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
+        write (*,'(A, ES10.2)') 'new V0 = ',this%V0
+        write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1
+        ! amk - DO WE NEED TO CHANGE this%State%Omega_de to the new value
+    else
+        OK = .true.
+    end if
+
+    if (.not. OK) stop 'Search for good intial conditions did not converge' !this shouldn't happen
+
+    y(1)=initial_phi
+    initial_phidot =  this%astart*this%phidot_start(initial_phi)
+    y(2)= initial_phidot*this%astart**2
+
+    phi_a(1)=y(1)
+    phidot_a(1)=y(2)/this%astart**2
+    sampled_a(1)=this%astart
+    da_osc = 1
+    last_a = this%astart
+    max_ix =0
+
+    ind=1
+    afrom=this%log_astart
+    do i=1, npoints-1
+        aend = this%log_astart + this%dloga*i
+        ix = i+1
+        sampled_a(ix)=exp(aend)
+        a2 = sampled_a(ix)**2
+        call dverk(this,NumEqs,EvolveBackgroundLog,afrom,y,aend,this%integrate_tol,ind,c,NumEqs,w)
+        if (.not. this%check_errorAS(exp(afrom), exp(aend))) return
+        call EvolveBackgroundLog(this,NumEqs,aend,y,w(:,1))
+        phi_a(ix)=y(1)
+        phidot_a(ix)=y(2)/a2
+        if (i==1) then
+            lastsign = y(2)
+        elseif (y(2)*lastsign < 0) then
+            !derivative has changed sign. Use to probe any oscillation scale:
+            da_osc = min(da_osc, exp(aend) - last_a)
+            last_a = exp(aend)
+            lastsign= y(2)
+        end if
+
+        !Define fde as ratio of early dark energy density to total
+        fde(ix) = 1/((this%state%grho_no_de(sampled_a(ix)) +  this%frac_lambda0*this%State%grhov*a2**2) &
+            /(a2*(0.5d0* phidot_a(ix)**2 + a2*this%Vofphi(y(1),0))) + 1)
+        if (max_ix==0 .and. ix > 2 .and. fde(ix)< fde(ix-1)) then
+            max_ix = ix-1
+        end if
+        if (sampled_a(ix)*(exp(this%dloga)-1)*this%min_steps_per_osc > da_osc) then
+            !Step size getting too big to sample oscillations well
+            exit
+        end if
+    end do
+
+    ! Do remaining steps with linear spacing in a, trying to be small enough
+    this%npoints_log = ix
+    this%max_a_log = sampled_a(ix)
+    this%da = min(this%max_a_log *(exp(this%dloga)-1), &
+        da_osc/this%min_steps_per_osc, (1- this%max_a_log)/(this%npoints-this%npoints_log))
+    this%npoints_linear = int((1- this%max_a_log)/ this%da)+1
+    this%da = (1- this%max_a_log)/this%npoints_linear
+
+    tot_points = this%npoints_log+this%npoints_linear
+    allocate(this%phi_a(tot_points),this%phidot_a(tot_points))
+    allocate(this%ddphi_a(tot_points),this%ddphidot_a(tot_points))
+    allocate(this%sampled_a(tot_points), this%fde(tot_points), this%ddfde(tot_points))
+    this%sampled_a(1:ix) = sampled_a(1:ix)
+    this%phi_a(1:ix) = phi_a(1:ix)
+    this%phidot_a(1:ix) = phidot_a(1:ix)
+    this%sampled_a(1:ix) = sampled_a(1:ix)
+    this%fde(1:ix) = fde(1:ix)
+
+    ind=1
+    afrom = this%max_a_log
+    do i=1, this%npoints_linear
+        ix = this%npoints_log + i
+        aend = this%max_a_log + this%da*i
+        a2 =aend**2
+        this%sampled_a(ix)=aend
+        call dverk(this,NumEqs,EvolveBackground,afrom,y,aend,this%integrate_tol,ind,c,NumEqs,w)
+        if (.not. this%check_errorAS(afrom, aend)) return
+        call EvolveBackground(this,NumEqs,aend,y,w(:,1))
+        this%phi_a(ix)=y(1)
+        this%phidot_a(ix)=y(2)/a2
+
+        this%fde(ix) = 1/((this%state%grho_no_de(aend) +  this%frac_lambda0*this%State%grhov*a2**2) &
+            /(a2*(0.5d0* this%phidot_a(ix)**2 + a2*this%Vofphi(y(1),0))) + 1)
+        if (max_ix==0 .and. this%fde(ix)< this%fde(ix-1)) then
+            max_ix = ix-1
+        end if
+    end do
+
+    call spline(this%sampled_a,this%phi_a,tot_points,splZero,splZero,this%ddphi_a)
+    call spline(this%sampled_a,this%phidot_a,tot_points,splZero,splZero,this%ddphidot_a)
+    ! call spline(this%sampled_a,this%fde,tot_points,splZero,splZero,this%ddfde)
+    ! has_peak = .false.
+    ! if (max_ix >0) then
+    !     ix = max_ix
+    !     has_peak = this%fde_peak(a_c, this%sampled_a(ix), this%sampled_a(ix+1), this%fde(ix), &
+    !         this%fde(ix+1), this%ddfde(ix), this%ddfde(ix+1))
+    !     if (.not. has_peak) then
+    !         has_peak = this%fde_peak(a_c, this%sampled_a(ix-1), this%sampled_a(ix), &
+    !             this%fde(ix-1), this%fde(ix), this%ddfde(ix-1), this%ddfde(ix))
+    !     end if
+    ! end if
+    ! if (has_peak) then
+    !     this%zc = 1/a_c-1
+    !     this%fde_zc = this%fdeAta(a_c)
+    ! else
+    !     if (this%DebugLevel>0) write(*,*) 'TEarlyQuintessence: NO PEAK '
+    !     this%zc = -1
+    ! end if
+    ! if (this%DebugLevel>0) then
+    !     write(*,*) 'TEarlyQuintessence zc, fde used', this%zc, this%fde_zc
+    ! end if
+
+    end subroutine TEarlyQuintessenceAS_Init
+
+    logical function check_errorAS(this, afrom, aend)
+    class(TEarlyQuintessenceAS) :: this
+    real(dl) afrom, aend
+
+    if (global_error_flag/=0) then
+        write(*,*) 'TEarlyQuintessenceAS error integrating', afrom, aend
+        write(*,*) this%n, this%V0, this%theta_i
+        stop
+        check_errorAS = .false.
+        return
+    end if
+    check_errorAS= .true.
+    end function check_errorAS
+
+    ! logical function fde_peak(this, peak, xlo, xhi, Flo, Fhi, ddFlo, ddFhi)
+    ! class(TEarlyQuintessence) :: this
+    ! real(dl), intent(out) :: peak
+    ! real(dl) Delta
+    ! real(dl), intent(in) :: xlo, xhi, ddFlo, ddFhi,Flo, Fhi
+    ! real(dl) a, b, c, fac
+
+    ! !See if derivative has zero in spline interval xlo .. xhi
+
+    ! Delta = xhi - xlo
+
+    ! a = 0.5_dl*(ddFhi-ddFlo)/Delta
+    ! b = (xhi*ddFlo-xlo*ddFhi)/Delta
+    ! c = (Fhi-Flo)/Delta+ Delta/6._dl*((1-3*xhi**2/Delta**2)*ddFlo+(3*xlo**2/Delta**2-1)*ddFhi)
+    ! fac = b**2-4*a*c
+    ! if (fac>=0) then
+    !     fac = sqrt(fac)
+    !     peak = (-b + fac)/2/a
+    !     if (peak >= xlo .and. peak <= xhi) then
+    !         fde_peak = .true.
+    !         return
+    !     else
+    !         peak = (-b - fac)/2/a
+    !         if (peak >= xlo .and. peak <= xhi) then
+    !             fde_peak = .true.
+    !             return
+    !         end if
+    !     end if
+    ! end if
+    ! fde_peak = .false.
+
+    ! end function fde_peak
+
+    ! function match_zc(this, logm)
+    ! class(TEarlyQuintessence), intent(inout) :: this
+    ! real(dl), intent(in) :: logm
+    ! real(dl) match_zc, zc, fde_zc
+
+    ! this%m = exp(logm)
+    ! call this%calc_zc_fde(zc, fde_zc)
+    ! match_zc = zc - this%zc
+
+    ! end function match_zc
+
+    ! function match_fde(this, logf)
+    ! class(TEarlyQuintessence), intent(inout) :: this
+    ! real(dl), intent(in) :: logf
+    ! real(dl) match_fde, zc, fde_zc
+
+    ! this%f = exp(logf)
+    ! call this%calc_zc_fde(zc, fde_zc)
+    ! match_fde = fde_zc - this%fde_zc
+
+    ! end function match_fde
+
+    ! function match_fde_zc(this, x)
+    ! class(TEarlyQuintessence) :: this
+    ! real(dl), intent(in) :: x(:)
+    ! real(dl) match_fde_zc, zc, fde_zc
+
+    ! this%f = exp(x(1))
+    ! this%m = exp(x(2))
+    ! call this%calc_zc_fde(zc, fde_zc)
+
+    ! match_fde_zc = (log(this%fde_zc)-log(fde_zc))**2 + (log(zc)-log(this%zc))**2
+    ! if (this%DebugLevel>1) then
+    !     write(*,*) 'search f, m, zc, fde_zc, chi2', this%f, this%m, zc, fde_zc, match_fde_zc
+    ! end if
+
+    ! end function match_fde_zc
+
+    ! subroutine calc_zc_fdeAS(this, z_c, fde_zc)
+    ! class(TEarlyQuintessenceAS), intent(inout) :: this
+    ! real(dl), intent(out) :: z_c, fde_zc
+    ! real(dl) aend, afrom
+    ! integer, parameter ::  NumEqs=2
+    ! real(dl) c(24),w(NumEqs,9), y(NumEqs)
+    ! integer ind, i, ix
+    ! real(dl), parameter :: splZero = 0._dl
+    ! real(dl) a_c
+    ! real(dl) initial_phi, initial_phidot, a2
+    ! real(dl), dimension(:), allocatable :: sampled_a, fde, ddfde
+    ! integer npoints, max_ix
+    ! logical has_peak
+    ! real(dl) a0, b0, da
+
+    ! ! Get z_c and f_de(z_c) where z_c is the redshift of (first) peak of f_de (de energy fraction)
+    ! ! Do this by forward propagating until peak, then get peak values by cubic interpolation
+
+    ! initial_phi = this%theta_i*this%f
+    ! this%log_astart = log(this%astart)
+    ! this%dloga = (-this%log_astart)/(this%npoints-1)
+
+    ! npoints = (-this%log_astart)/this%dloga + 1
+    ! allocate(sampled_a(npoints), fde(npoints), ddfde(npoints))
+
+    ! y(1)=initial_phi
+    ! initial_phidot =  this%astart*this%phidot_start(initial_phi)
+    ! y(2)= initial_phidot*this%astart**2
+    ! sampled_a(1)=this%astart
+    ! max_ix =0
+    ! ind=1
+    ! afrom=this%log_astart
+    ! do i=1, npoints-1
+    !     aend = this%log_astart + this%dloga*i
+    !     ix = i+1
+    !     sampled_a(ix)=exp(aend)
+    !     a2 = sampled_a(ix)**2
+    !     call dverk(this,NumEqs,EvolveBackgroundLog,afrom,y,aend,this%integrate_tol,ind,c,NumEqs,w)
+    !     if (.not. this%check_error(exp(afrom), exp(aend))) return
+    !     call EvolveBackgroundLog(this,NumEqs,aend,y,w(:,1))
+    !     fde(ix) = 1/((this%state%grho_no_de(sampled_a(ix)) +  this%frac_lambda0*this%State%grhov*a2**2) &
+    !         /((0.5d0*y(2)**2/a2 + a2**2*this%Vofphi(y(1),0))) + 1)
+    !     if (max_ix==0 .and. ix > 2 .and. fde(ix)< fde(ix-1)) then
+    !         max_ix = ix-1
+    !     end if
+    !     if (max_ix/=0 .and. ix > max_ix+4) exit
+    ! end do
+
+    ! call spline(sampled_a,fde,ix,splZero,splZero,ddfde)
+    ! has_peak = .false.
+    ! if (max_ix >0) then
+    !     has_peak = this%fde_peak(a_c, sampled_a(max_ix), sampled_a(max_ix+1), fde(max_ix), &
+    !         fde(max_ix+1), ddfde(max_ix), ddfde(max_ix+1))
+    !     if (.not. has_peak) then
+    !         has_peak = this%fde_peak(a_c, sampled_a(max_ix-1), sampled_a(max_ix), &
+    !             fde(max_ix-1), fde(max_ix), ddfde(max_ix-1), ddfde(max_ix))
+    !     end if
+    ! end if
+    ! if (has_peak) then
+    !     z_c = 1/a_c-1
+    !     ix = int((log(a_c)-this%log_astart)/this%dloga)+1
+    !     da = sampled_a(ix+1) - sampled_a(ix)
+    !     a0 = (sampled_a(ix+1) - a_c)/da
+    !     b0 = 1 - a0
+    !     fde_zc=b0*fde(ix+1) + a0*(fde(ix)-b0*((a0+1)*ddfde(ix)+(2-a0)*ddfde(ix+1))*da**2/6._dl)
+    ! else
+    !     write(*,*) 'calc_zc_fde: NO PEAK'
+    !     z_c = -1
+    !     fde_zc = 0
+    ! end if
+
+    ! end subroutine calc_zc_fdeAS
+
+    ! function fdeAtaAS(this,a)
+    ! class(TEarlyQuintessenceAS) :: this
+    ! real(dl), intent(in) :: a
+    ! real(dl) fdeAtaAS, aphi, aphidot, a2
+
+    ! call this%ValsAta(a, aphi, aphidot)
+    ! a2 = a**2
+    ! fdeAtaAS = 1/((this%state%grho_no_de(a) +  this%frac_lambda0*this%State%grhov*a2**2) &
+    !     /(a2*(0.5d0* aphidot**2 + a2*this%Vofphi(aphi,0))) + 1)
+    ! end function fdeAtaAS
+
+    subroutine TEarlyQuintessenceAS_ReadParams(this, Ini)
+    use IniObjects
+    class(TEarlyQuintessenceAS) :: this
+    class(TIniFile), intent(in) :: Ini
+
+    call this%TDarkEnergyModel%ReadParams(Ini)
+
+    end subroutine TEarlyQuintessenceAS_ReadParams
+
+
+    function TEarlyQuintessenceAS_PythonClass()
+    character(LEN=:), allocatable :: TEarlyQuintessenceAS_PythonClass
+
+    TEarlyQuintessenceAS_PythonClass = 'EarlyQuintessenceAS'
+
+    end function TEarlyQuintessenceAS_PythonClass
+
+    subroutine TEarlyQuintessenceAS_SelfPointer(cptr,P)
+    use iso_c_binding
+    Type(c_ptr) :: cptr
+    Type (TEarlyQuintessenceAS), pointer :: PType
+    class (TPythonInterfacedClass), pointer :: P
+
+    call c_f_pointer(cptr, PType)
+    P => PType
+
+    end subroutine TEarlyQuintessenceAS_SelfPointer
+
+
+
+    !------------Exponential Potential Functions End-------------!
+
+
+    real(dl) function GetOmegaFromInitial(this, astart,phi,phidot,atol)
+    !Get omega_de today given particular conditions phi and phidot at a=astart
+    class(TQuintessence) :: this
+    real(dl), intent(IN) :: astart, phi,phidot, atol
+    integer, parameter ::  NumEqs=2
+    real(dl) c(24),w(NumEqs,9), y(NumEqs), ast
+    integer ind, i
+    
+    ast=astart
+    ind=1
+    y(1)=phi
+    y(2)=phidot*astart**2
+    call dverk(this,NumEqs,EvolveBackground,ast,y,1._dl,atol,ind,c,NumEqs,w)
+    call EvolveBackground(this,NumEqs,1._dl,y,w(:,1))
+    
+    GetOmegaFromInitial=(0.5d0*y(2)**2 + this%Vofphi(y(1),0))/this%State%grhocrit !(3*adot**2)
+    
+    end function GetOmegaFromInitial
     end module Quintessence
