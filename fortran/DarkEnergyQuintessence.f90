@@ -838,25 +838,25 @@
     end if
     allocate(phi_a(npoints),phidot_a(npoints), sampled_a(npoints), fde(npoints))
 
-    write (*,'(A, 2ES10.2)') 'Initial values received for V0,n = ', this%V0,this%n ! just for testing 
+    if (FeedbackLevel > 0) write (*,'(A, 2ES10.2)') 'Initial values received for V0, n = ', this%V0,this%n ! just for testing 
 
     initial_phi = this%theta_i
     astart = this%astart
     atol = this%atol
     initial_phidot =  astart*this%phidot_start(initial_phi)
     om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
-    ! write (*,*) 'checking if need to adjust input V0 = ',this%V0
-    ! write(*,*) 'Omega_DE from scalar field IC = ',om1
-    ! write(*,*) 'Omega_DE required = ',this%State%Omega_de
+    if (FeedbackLevel > 0) write (*,*) 'checking if need to adjust input V0 = ',this%V0
+    if (FeedbackLevel > 0) write(*,*) 'Omega_DE from scalar field IC = ',om1
+    if (FeedbackLevel > 0) write(*,*) 'Omega_DE required = ',this%State%Omega_de
     if (abs(om1-this%State%Omega_de)>this%omega_tol) then
         OK = .false.
-        ! write (*,*) 'initial scf values do not give correct field evolution, adjusting V0, diff = ', abs(om1-this%State%Omega_de)
+        if (FeedbackLevel > 0) write (*,*) 'initial scf values do not give correct field evolution, adjusting V0, diff = ', abs(om1-this%State%Omega_de)
         do iter=1,100 ! this method works but we can make our search more robust by using the BOBYQA or NEWUOA minimizers
             logV0_in = log10(this%V0)
             this%V0 = 10**(0.5_dl * log10(this%State%Omega_de/om1) + logV0_in)
             om1 = this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
-            ! write (*,*) 'new V0 = ',this%V0
-            ! write(*,*) 'diff Omega_DE = ', abs(om1-this%State%Omega_de)
+            if (FeedbackLevel > 1) write (*,*) 'new V0 = ',this%V0
+            if (FeedbackLevel > 1) write(*,*) 'diff Omega_DE = ', abs(om1-this%State%Omega_de)
             if (abs(om1-this%State%Omega_de)>this%omega_tol) then
                 OK = .false.
             else
@@ -864,10 +864,10 @@
                 exit
             end if
         end do
-        write(*,*) 'Search for new V0 converged = ',OK
-        ! write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
-        ! write (*,'(A, ES10.2)') 'new V0 = ',this%V0
-        ! write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1
+        if (FeedbackLevel > 0) write(*,*) 'Search for new V0 converged = ',OK
+        if (FeedbackLevel > 1) write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
+        if (FeedbackLevel > 1) write (*,'(A, ES10.2)') 'new V0 = ',this%V0
+        if (FeedbackLevel > 1) write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1
         ! amk - DO WE NEED TO CHANGE this%State%Omega_de to the new value
     else
         OK = .true.
