@@ -1,3 +1,5 @@
+Version of CAMB used in https://arxiv.org/abs/2405.17396 for the exponential quintessence model.
+
 ===================
 CAMB
 ===================
