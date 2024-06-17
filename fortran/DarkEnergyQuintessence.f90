@@ -79,16 +79,18 @@
     procedure :: calc_zc_fde
     end type TEarlyQuintessence
 
-    type, extends(TQuintessence) :: TEarlyQuintessenceAS ! adding a new class for the pure exponential potential
-        real(dl) :: n = 0.5_dl
-        real(dl) :: V0 = 1e-10 !m in reduced Planck mass units
-        real(dl) :: theta_i = 0._dl !initial value of phi/f
+    type, extends(TQuintessence) :: TEarlyQuintessenceAS ! adding a new class for the Albrecht-Skordis potential
+        real(dl) :: n = 0.5_dl ! this is lambda
+        real(dl) :: V0 = 1d-60 ! V0 in reduced Planck mass units 1e-10
+        real(dl) :: theta_i = 0._dl !initial value of phi/Mpl
+        real(dl) :: Bphi = 0._dl
+        real(dl) :: Aphi = 0._dl
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
         logical :: use_zc = .false. !adjust m to fit zc
         real(dl) :: zc, fde_zc !readshift for peak f_de and f_de at that redshift
         integer :: npoints = 6000 !baseline number of log a steps; will be increased if needed when there are oscillations
-        real(dl) :: omega_tol = 1d-4 !tolerance for OmegaDE
-        real(dl) :: atol = 1e-8_dl
+        real(dl) :: omega_tol = 1d-6 !tolerance for OmegaDE
+        real(dl) :: atol = 1d-8
         integer :: min_steps_per_osc = 10
         real(dl), dimension(:), allocatable :: fde, ddfde
     contains
@@ -788,15 +790,16 @@
     real(dl) theta
     real(dl), parameter :: units = MPC_in_sec**2 /Tpl**2  !convert to units of 1/Mpc^2
 
+    ! write (*,*) 'unit pre-factor =',units
     ! Assume f = sqrt(kappa)*f_theory = f_theory/M_pl
     ! m = m_theory/M_Pl
     theta = phi
     if (deriv==0) then
-        Vofphi = this%V0*exp(-this%n*theta) + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
+        Vofphi = units*this%V0**2*exp(-this%n*theta) + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
     else if (deriv ==1) then
-        Vofphi = -this%V0*this%n*exp(-this%n*theta) !units*this%m**2*this%f*this%n*(1 - cos(theta))**(this%n-1)*sin(theta)
+        Vofphi = -units*this%V0**2*this%n*exp(-this%n*theta) !units*this%m**2*this%f*this%n*(1 - cos(theta))**(this%n-1)*sin(theta)
     else if (deriv ==2) then
-        Vofphi = this%V0*this%n**2*exp(-this%n*theta)
+        Vofphi = units*this%V0**2*this%n**2*exp(-this%n*theta)
     end if
     end function TEarlyQuintessenceAS_VofPhi
 
@@ -847,11 +850,14 @@
     om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
     if (FeedbackLevel > 0) write (*,*) 'checking if need to adjust input V0 = ',this%V0
     if (FeedbackLevel > 0) write(*,*) 'Omega_DE from scalar field IC = ',om1
+    if (FeedbackLevel > 0) write(*,*) 'Omega_DE tolerance = ',this%omega_tol
     if (FeedbackLevel > 0) write(*,*) 'Omega_DE required = ',this%State%Omega_de
+
+    ! --------------- method 1 for initial conditions tuning V0 ------------------------------
     if (abs(om1-this%State%Omega_de)>this%omega_tol) then
         OK = .false.
         if (FeedbackLevel > 0) write (*,*) 'initial scf values do not give correct field evolution, adjusting V0, diff = ', abs(om1-this%State%Omega_de)
-        do iter=1,100 ! this method works but we can make our search more robust by using the BOBYQA or NEWUOA minimizers
+        do iter=1,150 ! this method works but we can make our search more robust by using the BOBYQA or NEWUOA minimizers
             logV0_in = log10(this%V0)
             this%V0 = 10**(0.5_dl * log10(this%State%Omega_de/om1) + logV0_in)
             om1 = this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
@@ -874,6 +880,51 @@
     end if
 
     if (.not. OK) stop 'Search for good intial conditions did not converge' !this shouldn't happen
+
+    ! --------------- method 1 for initial conditions tuning V0 End ------------------------------
+
+
+    ! --------------- method 2 for initial conditions tuning V0 ------------------------------
+
+    !om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot, atol)
+    !
+    !print*, State%omega_de, 'first trial:', om1
+    !if (abs(om1-State%omega_de > this%omega_tol)) then
+    !    !if not, do binary search in the interval
+    !    OK=.false.
+    !    initial_phidot = astart*this%phidot_start(initial_phi2)
+    !    om2= this%GetOmegaFromInitial(astart,initial_phi2,initial_phidot, atol)
+    !    if (om1 > State%omega_de .or. om2 < State%omega_de) then
+    !        write (*,*) 'initial phi values must bracket required value.  '
+    !        write (*,*) 'om1, om2 = ', real(om1), real(om2)
+    !        stop
+    !    end if
+    !    do iter=1,100
+    !        deltaphi=initial_phi2-initial_phi
+    !        phi =initial_phi + deltaphi/2
+    !        initial_phidot =  astart*Quint_phidot_start(phi)
+    !        om = this%GetOmegaFromInitial(astart,phi,initial_phidot,atol)
+    !        if (om < State%omega_de) then
+    !            om1=om
+    !            initial_phi=phi
+    !        else
+    !            om2=om
+    !            initial_phi2=phi
+    !        end if
+    !        if (om2-om1 < 1d-3) then
+    !            OK=.true.
+    !            initial_phi = (initial_phi2+initial_phi)/2
+    !            if (FeedbackLevel > 0) write(*,*) 'phi_initial = ',initial_phi
+    !            exit
+    !        end if
+    !
+    !    end do !iterations
+    !    if (.not. OK) stop 'Search for good intial conditions did not converge' !this shouldn't happen
+    !
+    !end if !Find initial
+
+    ! --------------- method 2 for initial conditions tuning V0 End ------------------------------
+
 
     y(1)=initial_phi
     initial_phidot =  this%astart*this%phidot_start(initial_phi)
