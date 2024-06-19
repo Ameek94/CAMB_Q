@@ -57,7 +57,7 @@ class DarkEnergyEqnOfState(DarkEnergyModel):
 
     def set_w_a_table(self, a, w):
         """
-        Set w(a) from numerical values (used as cublic spline). Note this is quite slow.
+        Set w(a) from numerical values (used as cubic spline). Note this is quite slow.
 
         :param a: array of scale factors
         :param w: array of w(a)
@@ -86,7 +86,7 @@ class DarkEnergyEqnOfState(DarkEnergyModel):
 class DarkEnergyFluid(DarkEnergyEqnOfState):
     """
     Class implementing the w, wa or splined w(a) parameterization using the constant sound-speed single fluid model
-    (as for single-field quintessense).
+    (as for single-field quintessence).
 
     """
 
@@ -100,7 +100,7 @@ class DarkEnergyFluid(DarkEnergyEqnOfState):
                 raise CAMBError('fluid dark energy model does not support w crossing -1')
 
     def set_w_a_table(self, a, w):
-        # check w array has elements that are all the same sign or zero
+        # check w array has elements that do not cross -1
         if np.sign(1 + np.max(w)) - np.sign(1 + np.min(w)) == 2:
             raise ValueError('fluid dark energy model does not support w crossing -1')
         super().set_w_a_table(a, w)
@@ -109,9 +109,12 @@ class DarkEnergyFluid(DarkEnergyEqnOfState):
 @fortran_class
 class DarkEnergyPPF(DarkEnergyEqnOfState):
     """
-    Class implementating the w, wa or splined w(a) parameterization in the PPF perturbation approximation
+    Class implementing the w, wa or splined w(a) parameterization in the PPF perturbation approximation
     (`arXiv:0808.3125 <https://arxiv.org/abs/0808.3125>`_)
     Use inherited methods to set parameters or interpolation table.
+
+    Note PPF is not a physical model and just designed to allow crossing -1 in an ad hoc smooth way. For models
+    with w>-1 but far from cosmological constant, it can give quite different answers to the fluid model with c_s^2=1.
 
     """
     # cannot declare c_Gamma_ppf directly here as have not defined all fields in DarkEnergyEqnOfState (TCubicSpline)
@@ -122,7 +125,7 @@ class DarkEnergyPPF(DarkEnergyEqnOfState):
 @fortran_class
 class AxionEffectiveFluid(DarkEnergyModel):
     """
-    Example implementation of a specifc (early) dark energy fluid model
+    Example implementation of a specific (early) dark energy fluid model
     (`arXiv:1806.10608 <https://arxiv.org/abs/1806.10608>`_).
     Not well tested, but should serve to demonstrate how to make your own custom classes.
     """
@@ -180,7 +183,7 @@ class Quintessence(DarkEnergyModel):
 @fortran_class
 class EarlyQuintessence(Quintessence):
     r"""
-    Example early quintessence (axion-like, as arXiv:1908.06995) with potential
+    Example early quintessence (axion-like, as `arXiv:1908.06995 <https://arxiv.org/abs/1908.06995>`_) with potential
 
      V(\phi) = m^2f^2 (1 - cos(\phi/f))^n + \Lambda_{cosmological constant}
 
@@ -193,11 +196,11 @@ class EarlyQuintessence(Quintessence):
                         "only used for initial search value when use_zc is True"),
         ("theta_i", c_double, "phi/f initial field value"),
         ("frac_lambda0", c_double, "fraction of dark energy in cosmological constant today (approximated as 1)"),
-        ("use_zc", c_bool, "solve for f, m to get specific critical reshift zc and fde_zc"),
-        ("zc", c_double, "reshift of peak fractional early dark energy density"),
+        ("use_zc", c_bool, "solve for f, m to get specific critical redshift zc and fde_zc"),
+        ("zc", c_double, "redshift of peak fractional early dark energy density"),
         ("fde_zc", c_double, "fraction of early dark energy density to total at peak"),
         ("npoints", c_int, "number of points for background integration spacing"),
-        ("min_steps_per_osc", c_int, "minimumum number of steps per background oscillation scale"),
+        ("min_steps_per_osc", c_int, "minimum number of steps per background oscillation scale"),
         ("fde", AllocatableArrayDouble, "after initialized, the calculated background early dark energy "
                                         "fractions at sampled_a"),
         ("__ddfde", AllocatableArrayDouble)

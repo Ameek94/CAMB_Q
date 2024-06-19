@@ -1,7 +1,7 @@
 .. _fortran-compilers:
 
 Fortran compilers
-=========================
+=================
 
 CAMB internally uses modern (object-oriented) Fortran 2008 for most numerical calculations, and needs a recent
 fortran compiler to build the numerical library. The recommended compilers are
@@ -29,8 +29,8 @@ For example, to run a configured shell in docker where you can install and run c
 
     docker run -v /local/git/path/CAMB:/camb -i -t cmbant/cosmobox
 
-Updating and modified Fortran code
-===================================
+Updating modified Fortran code
+------------------------------
 
 In the main CAMB source root directory, to re-build the Fortran binary including any
 pulled or local changes use::
@@ -45,7 +45,7 @@ This includes in Jupyter notebooks; just re-start the kernel or use::
     import IPython
     IPython.Application.instance().kernel.do_shutdown(True)
 
-If you want to automamatically rebuild the library from Jupyter you can do something like this::
+If you want to automatically rebuild the library from Jupyter you can do something like this::
 
     import subprocess
     import sys
