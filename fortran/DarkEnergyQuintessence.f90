@@ -79,36 +79,35 @@
     procedure :: calc_zc_fde
     end type TEarlyQuintessence
 
-    type, extends(TQuintessence) :: TEarlyQuintessenceAS ! adding a new class for the Albrecht-Skordis potential
-        real(dl) :: n = 0.5_dl ! this is lambda
-        real(dl) :: V0 = 1d-60 ! V0 in reduced Planck mass units 1e-10
-        real(dl) :: theta_i = 0._dl !initial value of phi/Mpl
-        real(dl) :: Bphi = 0._dl
-        real(dl) :: Aphi = 0._dl
+    type, extends(TQuintessence) :: TQuintessenceModel ! adding a new class for the pure exponential potential
+        real(dl) :: n = 1_dl
+        real(dl) :: V0 = 1e-10 !m in reduced Planck mass units
+        real(dl) :: theta_i = 0_dl !initial field value
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
         logical :: use_zc = .false. !adjust m to fit zc
         real(dl) :: zc, fde_zc !readshift for peak f_de and f_de at that redshift
         integer :: npoints = 6000 !baseline number of log a steps; will be increased if needed when there are oscillations
-        real(dl) :: omega_tol = 1d-6 !tolerance for OmegaDE
-        real(dl) :: atol = 1d-8
+        real(dl) :: omega_tol = 1d-5 !tolerance for OmegaDE
+        real(dl) :: atol = 1e-8_dl
         integer :: min_steps_per_osc = 10
+        integer :: model_idx = 1 ! which quintessence model (VofPhi) to use
         real(dl), dimension(:), allocatable :: fde, ddfde
     contains
-    procedure :: Vofphi => TEarlyQuintessenceAS_VofPhi
-    procedure :: Init => TEarlyQuintessenceAS_Init
-    procedure :: ReadParams =>  TEarlyQuintessenceAS_ReadParams
-    procedure, nopass :: PythonClass => TEarlyQuintessenceAS_PythonClass
-    procedure, nopass :: SelfPointer => TEarlyQuintessenceAS_SelfPointer
-    ! procedure, private :: fdeAtaAS
-    ! procedure, private :: fde_peakAS
-    procedure, private :: check_errorAS
-    ! procedure :: calc_zc_fdeAS
+    procedure :: Vofphi => TQuintessenceModel_VofPhi
+    procedure :: Init => TQuintessenceModel_Init
+    procedure :: ReadParams =>  TQuintessenceModel_ReadParams
+    procedure, nopass :: PythonClass => TQuintessenceModel_PythonClass
+    procedure, nopass :: SelfPointer => TQuintessenceModel_SelfPointer
+    ! procedure, private :: fdeAtaQ
+    ! procedure, private :: fde_peakQ
+    procedure, private :: check_errorQ
+    ! procedure :: calc_zc_fdeQ
 
-    end type TEarlyQuintessenceAS
+    end type TQuintessenceModel
 
     procedure(TClassDverk) :: dverk
 
-    public TQuintessence, TEarlyQuintessence,TEarlyQuintessenceAS
+    public TQuintessence, TEarlyQuintessence,TQuintessenceModel
     contains
 
     function VofPhi(this, phi, deriv)
@@ -780,32 +779,50 @@
 
     !------------Exponential Potential Functions-------------!
 
-    function TEarlyQuintessenceAS_VofPhi(this, phi, deriv) result(VofPhi)
+    function TQuintessenceModel_VofPhi(this, phi, deriv) result(VofPhi)
     !The input variable phi is sqrt(8*Pi*G)*psi
     !Returns (8*Pi*G)^(1-deriv/2)*d^{deriv}V(psi)/d^{deriv}psi evaluated at psi
     !return result is in 1/Mpc^2 units [so times (Mpc/c)^2 to get units in 1/Mpc^2]
-    class(TEarlyQuintessenceAS) :: this
+    class(TQuintessenceModel) :: this
     real(dl) phi,Vofphi
     integer deriv
     real(dl) theta
     real(dl), parameter :: units = MPC_in_sec**2 /Tpl**2  !convert to units of 1/Mpc^2
-
-    ! write (*,*) 'unit pre-factor =',units
     ! Assume f = sqrt(kappa)*f_theory = f_theory/M_pl
     ! m = m_theory/M_Pl
     theta = phi
-    if (deriv==0) then
-        Vofphi = units*this%V0**2*exp(-this%n*theta) + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
-    else if (deriv ==1) then
-        Vofphi = -units*this%V0**2*this%n*exp(-this%n*theta) !units*this%m**2*this%f*this%n*(1 - cos(theta))**(this%n-1)*sin(theta)
-    else if (deriv ==2) then
-        Vofphi = units*this%V0**2*this%n**2*exp(-this%n*theta)
+    if (this%model_idx==3) then !FT Hilltop
+        if (deriv==0) then 
+            Vofphi = this%V0*(1 - (theta/this%n)**2 ) + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
+        else if (deriv ==1) then
+            Vofphi = -2*this%V0 * theta/ (this%n)**2  !units*this%m**2*this%f*this%n*(1 - cos(theta))**(this%n-1)*sin(theta)
+        else if (deriv ==2) then
+            Vofphi = -2*this%V0 / (this%n)**2
+        end if
+    elseif (this%model_idx==2) then !Sugra Hilltop
+        if (deriv==0) then 
+            Vofphi = this%V0*exp(-sqrt(2.)*theta)*exp(-2.*this%n*exp(sqrt(2.)*theta))*(1.+4.*this%n**2*exp(2.*sqrt(2.)*theta)-3.+4.*this%n*exp(sqrt(2.)*theta))
+        else if (deriv ==1) then
+            Vofphi = -2.*sqrt(2.)*exp(-2.*exp(sqrt(2.)*theta)*this%n-sqrt(2.)*theta)*(-1.-2.*exp(sqrt(2.)*theta)*this%n+2.*exp(2.*sqrt(2.)*theta)*this%n**2+4.*exp(3.*sqrt(2.)*theta)*this%n**3)*this%V0
+        else if (deriv ==2) then
+            Vofphi = 4.*exp(-2.*exp(sqrt(2.)*theta)*this%n-sqrt(2.)*theta)*(-1.-2.*exp(sqrt(2.)*theta)*this%n-6.*exp(2.*sqrt(2.)*theta)*this%n**2-4.*exp(3.*sqrt(2.)*theta)*this%n**3+8.*exp(4.*sqrt(2.)*theta)*this%n**4)*this%V0
+        end if
+    elseif (this%model_idx==1) then !Exponential Quintessence 
+        if (deriv==0) then 
+            Vofphi = this%V0*exp(-this%n*theta) + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
+        else if (deriv ==1) then
+            Vofphi = -this%V0*this%n*exp(-this%n*theta) !units*this%m**2*this%f*this%n*(1 - cos(theta))**(this%n-1)*sin(theta)
+        else if (deriv ==2) then
+            Vofphi = this%V0*this%n**2*exp(-this%n*theta)
+        end if
+    else 
+        stop 'Must provide a valid Quintessence model to use'
     end if
-    end function TEarlyQuintessenceAS_VofPhi
+    end function TQuintessenceModel_VofPhi
 
-    subroutine TEarlyQuintessenceAS_Init(this, State)
+    subroutine TQuintessenceModel_Init(this, State)
     use Powell
-    class(TEarlyQuintessenceAS), intent(inout) :: this
+    class(TQuintessenceModel), intent(inout) :: this
     class(TCAMBdata), intent(in), target :: State
     real(dl) aend, afrom
     integer, parameter ::  NumEqs=2
@@ -813,7 +830,7 @@
     integer ind, i, ix
     real(dl), parameter :: splZero = 0._dl
     real(dl) lastsign, da_osc, last_a, a_c
-    real(dl) initial_phi, initial_phidot, a2, logV0_in, om,om1,om2,atol,astart
+    real(dl) initial_phi, initial_phidot, a2, logV0_in, logV0, logV0_1, logV0_2,logV0_low, logV0_high, deltalogV0, V0_input, om,om1,om2,atol,astart
     real(dl), dimension(:), allocatable :: sampled_a, phi_a, phidot_a, fde
     integer npoints, tot_points, max_ix
     logical has_peak, OK
@@ -848,83 +865,104 @@
     atol = this%atol
     initial_phidot =  astart*this%phidot_start(initial_phi)
     om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
+    V0_input = this%V0
     if (FeedbackLevel > 0) write (*,*) 'checking if need to adjust input V0 = ',this%V0
     if (FeedbackLevel > 0) write(*,*) 'Omega_DE from scalar field IC = ',om1
     if (FeedbackLevel > 0) write(*,*) 'Omega_DE tolerance = ',this%omega_tol
     if (FeedbackLevel > 0) write(*,*) 'Omega_DE required = ',this%State%Omega_de
 
     ! --------------- method 1 for initial conditions tuning V0 ------------------------------
-    if (abs(om1-this%State%Omega_de)>this%omega_tol) then
-        OK = .false.
-        if (FeedbackLevel > 0) write (*,*) 'initial scf values do not give correct field evolution, adjusting V0, diff = ', abs(om1-this%State%Omega_de)
-        do iter=1,150 ! this method works but we can make our search more robust by using the BOBYQA or NEWUOA minimizers
-            logV0_in = log10(this%V0)
-            this%V0 = 10**(0.5_dl * log10(this%State%Omega_de/om1) + logV0_in)
-            om1 = this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
-            if (FeedbackLevel > 1) write (*,*) 'new V0 = ',this%V0
-            if (FeedbackLevel > 1) write(*,*) 'diff Omega_DE = ', abs(om1-this%State%Omega_de)
-            if (abs(om1-this%State%Omega_de)>this%omega_tol) then
-                OK = .false.
-            else
-                OK = .true.
-                exit
-            end if
-        end do
-        if (FeedbackLevel > 0) write(*,*) 'Search for new V0 converged = ',OK
-        if (FeedbackLevel > 1) write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
-        if (FeedbackLevel > 1) write (*,'(A, ES10.2)') 'new V0 = ',this%V0
-        if (FeedbackLevel > 1) write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1
-        ! amk - DO WE NEED TO CHANGE this%State%Omega_de to the new value
-    else
-        OK = .true.
-    end if
+    ! if (abs(om1-this%State%Omega_de)>this%omega_tol) then
+    !     OK = .false.
+    !     if (FeedbackLevel > 0) write (*,*) 'initial scf values do not give correct field evolution, adjusting V0, diff = ', abs(om1-this%State%Omega_de)
+    !     do iter=1,150 ! this method works but we can make our search more robust by using the BOBYQA or NEWUOA minimizers
+    !         logV0_in = log10(this%V0)
+    !         this%V0 = 10**(0.5_dl * log10(this%State%Omega_de/om1) + logV0_in)
+    !         om1 = this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
+    !         if (FeedbackLevel > 1) write (*,*) 'new V0 = ',this%V0
+    !         if (FeedbackLevel > 1) write(*,*) 'diff Omega_DE = ', abs(om1-this%State%Omega_de)
+    !         if (abs(om1-this%State%Omega_de)>this%omega_tol) then
+    !             OK = .false.
+    !         else
+    !             OK = .true.
+    !             exit
+    !         end if
+    !     end do
+    !     if (FeedbackLevel > 0) write(*,*) 'Search for new V0 converged = ',OK
+    !     if (FeedbackLevel > 1) write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
+    !     if (FeedbackLevel > 1) write (*,'(A, ES10.2)') 'new V0 from old method = ',this%V0
+    !     if (FeedbackLevel > 1) write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1 
+    !     ! amk - DO WE NEED TO CHANGE this%State%Omega_de to the new value
+    ! else
+    !     OK = .true.
+    ! end if
 
-    if (.not. OK) stop 'Search for good intial conditions did not converge' !this shouldn't happen
+    ! if (.not. OK) stop 'Search for good intial conditions did not converge' !this shouldn't happen ! Here we need to raise a CAMBerror so that cobaya assigns point -inf loglikelihood
 
     ! --------------- method 1 for initial conditions tuning V0 End ------------------------------
 
 
-    ! --------------- method 2 for initial conditions tuning V0 ------------------------------
+    ! --------------- method 2 for initial conditions tuning V0 using Binary search ------------------------------
+    this%V0 = 1d-6
+    om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
+    logV0_low = -15.0_dl
+    logV0_high = 5_dl
+    logV0 = this%V0
+    if (FeedbackLevel > 1) write (*,*)  'required DE, first trial:', this%State%omega_de, om1
+    if (abs(om1-this%State%omega_de) > this%omega_tol) then
+       !if not, do binary search in the interval
+       OK=.false.
+       this%V0 = 10**(logV0_low) 
+       om1 = this%GetOmegaFromInitial(astart,initial_phi,initial_phidot, atol)
+       this%V0 = 10**(logV0_high) 
+       om2= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot, atol)
+       if (om1 > this%State%omega_de .or. om2 < this%State%omega_de) then
+           write (*,*) 'No solution for V0 in provided range [V1,V2] = ', 10**(logV0_low), 10**(logV0_high)
+           write (*,*) 'om1, om2 = ', real(om1), real(om2)
+           !stop
+           global_error_flag = error_darkenergy
+           global_error_message= 'TEarlyQuintessence ERROR finding solution for V0' ! Here we need to raise a CAMBerror so that cobaya assigns point -inf loglikelihood
+           return            
+       end if
+       logV0_2 = logV0_high
+       logV0_1 = logV0_low
+       do iter=1,100
+           deltalogV0 = logV0_2 - logV0_1
+           logV0 = logV0_1 + deltalogV0/2
+           this%V0 = 10**(logV0)
+           om = this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
+           if (om < this%State%omega_de) then
+               om1=om
+               logV0_1 = logV0
+           else
+               om2=om
+               logV0_2 = logV0
+           end if
+           if (FeedbackLevel > 1) write (*,*) 'new V0, Omega_DE = ', real(this%V0), real(om)
+           if (FeedbackLevel > 1) write(*,*) 'diff Omega_DE = ', abs(om-this%State%Omega_de)
+           if (abs(om2-om1) < this%omega_tol) then
+               OK=.true.
+               logV0 = (logV0_2+logV0_1)/2
+               this%V0 = 10**(logV0)
+               if (FeedbackLevel > 0) write(*,*) 'tuned V0 = ',this%V0
+               exit
+           end if
+        end do !iterations
 
-    !om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot, atol)
-    !
-    !print*, State%omega_de, 'first trial:', om1
-    !if (abs(om1-State%omega_de > this%omega_tol)) then
-    !    !if not, do binary search in the interval
-    !    OK=.false.
-    !    initial_phidot = astart*this%phidot_start(initial_phi2)
-    !    om2= this%GetOmegaFromInitial(astart,initial_phi2,initial_phidot, atol)
-    !    if (om1 > State%omega_de .or. om2 < State%omega_de) then
-    !        write (*,*) 'initial phi values must bracket required value.  '
-    !        write (*,*) 'om1, om2 = ', real(om1), real(om2)
-    !        stop
-    !    end if
-    !    do iter=1,100
-    !        deltaphi=initial_phi2-initial_phi
-    !        phi =initial_phi + deltaphi/2
-    !        initial_phidot =  astart*Quint_phidot_start(phi)
-    !        om = this%GetOmegaFromInitial(astart,phi,initial_phidot,atol)
-    !        if (om < State%omega_de) then
-    !            om1=om
-    !            initial_phi=phi
-    !        else
-    !            om2=om
-    !            initial_phi2=phi
-    !        end if
-    !        if (om2-om1 < 1d-3) then
-    !            OK=.true.
-    !            initial_phi = (initial_phi2+initial_phi)/2
-    !            if (FeedbackLevel > 0) write(*,*) 'phi_initial = ',initial_phi
-    !            exit
-    !        end if
-    !
-    !    end do !iterations
-    !    if (.not. OK) stop 'Search for good intial conditions did not converge' !this shouldn't happen
-    !
-    !end if !Find initial
+        if (FeedbackLevel > 0) write(*,*) 'Search for new V0, converged = ',OK
+        if (FeedbackLevel > 1) write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
+        if (FeedbackLevel > 1) write (*,'(A, ES10.2)') 'new V0 from binary search = ',this%V0
+        if (FeedbackLevel > 1) write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1
+        
+        if (.not. OK) then !stop 'Search for good intial conditions did not converge' !this shouldn't happen 
+            global_error_flag = error_darkenergy
+            global_error_message= 'TEarlyQuintessence ERROR finding solution for V0, ' ! Here we need to raise a CAMBerror so that cobaya assigns point -inf loglikelihood
+            return
+        end if
+
+    end if !Find initial
 
     ! --------------- method 2 for initial conditions tuning V0 End ------------------------------
-
 
     y(1)=initial_phi
     initial_phidot =  this%astart*this%phidot_start(initial_phi)
@@ -945,7 +983,7 @@
         sampled_a(ix)=exp(aend)
         a2 = sampled_a(ix)**2
         call dverk(this,NumEqs,EvolveBackgroundLog,afrom,y,aend,this%integrate_tol,ind,c,NumEqs,w)
-        if (.not. this%check_errorAS(exp(afrom), exp(aend))) return
+        if (.not. this%check_errorQ(exp(afrom), exp(aend))) return
         call EvolveBackgroundLog(this,NumEqs,aend,y,w(:,1))
         phi_a(ix)=y(1)
         phidot_a(ix)=y(2)/a2
@@ -996,7 +1034,7 @@
         a2 =aend**2
         this%sampled_a(ix)=aend
         call dverk(this,NumEqs,EvolveBackground,afrom,y,aend,this%integrate_tol,ind,c,NumEqs,w)
-        if (.not. this%check_errorAS(afrom, aend)) return
+        if (.not. this%check_errorQ(afrom, aend)) return
         call EvolveBackground(this,NumEqs,aend,y,w(:,1))
         this%phi_a(ix)=y(1)
         this%phidot_a(ix)=y(2)/a2
@@ -1032,21 +1070,21 @@
     !     write(*,*) 'TEarlyQuintessence zc, fde used', this%zc, this%fde_zc
     ! end if
 
-    end subroutine TEarlyQuintessenceAS_Init
+    end subroutine TQuintessenceModel_Init
 
-    logical function check_errorAS(this, afrom, aend)
-    class(TEarlyQuintessenceAS) :: this
+    logical function check_errorQ(this, afrom, aend)
+    class(TQuintessenceModel) :: this
     real(dl) afrom, aend
 
     if (global_error_flag/=0) then
-        write(*,*) 'TEarlyQuintessenceAS error integrating', afrom, aend
+        write(*,*) 'TQuintessenceModel error integrating', afrom, aend
         write(*,*) this%n, this%V0, this%theta_i
         stop
-        check_errorAS = .false.
+        check_errorQ = .false.
         return
     end if
-    check_errorAS= .true.
-    end function check_errorAS
+    check_errorQ= .true.
+    end function check_errorQ
 
     ! logical function fde_peak(this, peak, xlo, xhi, Flo, Fhi, ddFlo, ddFhi)
     ! class(TEarlyQuintessence) :: this
@@ -1119,8 +1157,8 @@
 
     ! end function match_fde_zc
 
-    ! subroutine calc_zc_fdeAS(this, z_c, fde_zc)
-    ! class(TEarlyQuintessenceAS), intent(inout) :: this
+    ! subroutine calc_zc_fdeQ(this, z_c, fde_zc)
+    ! class(TQuintessenceModel), intent(inout) :: this
     ! real(dl), intent(out) :: z_c, fde_zc
     ! real(dl) aend, afrom
     ! integer, parameter ::  NumEqs=2
@@ -1190,46 +1228,46 @@
     !     fde_zc = 0
     ! end if
 
-    ! end subroutine calc_zc_fdeAS
+    ! end subroutine calc_zc_fdeQ
 
-    ! function fdeAtaAS(this,a)
-    ! class(TEarlyQuintessenceAS) :: this
+    ! function fdeAtaQ(this,a)
+    ! class(TQuintessenceModel) :: this
     ! real(dl), intent(in) :: a
-    ! real(dl) fdeAtaAS, aphi, aphidot, a2
+    ! real(dl) fdeAtaQ, aphi, aphidot, a2
 
     ! call this%ValsAta(a, aphi, aphidot)
     ! a2 = a**2
-    ! fdeAtaAS = 1/((this%state%grho_no_de(a) +  this%frac_lambda0*this%State%grhov*a2**2) &
+    ! fdeAtaQ = 1/((this%state%grho_no_de(a) +  this%frac_lambda0*this%State%grhov*a2**2) &
     !     /(a2*(0.5d0* aphidot**2 + a2*this%Vofphi(aphi,0))) + 1)
-    ! end function fdeAtaAS
+    ! end function fdeAtaQ
 
-    subroutine TEarlyQuintessenceAS_ReadParams(this, Ini)
+    subroutine TQuintessenceModel_ReadParams(this, Ini)
     use IniObjects
-    class(TEarlyQuintessenceAS) :: this
+    class(TQuintessenceModel) :: this
     class(TIniFile), intent(in) :: Ini
 
     call this%TDarkEnergyModel%ReadParams(Ini)
 
-    end subroutine TEarlyQuintessenceAS_ReadParams
+    end subroutine TQuintessenceModel_ReadParams
 
 
-    function TEarlyQuintessenceAS_PythonClass()
-    character(LEN=:), allocatable :: TEarlyQuintessenceAS_PythonClass
+    function TQuintessenceModel_PythonClass()
+    character(LEN=:), allocatable :: TQuintessenceModel_PythonClass
 
-    TEarlyQuintessenceAS_PythonClass = 'EarlyQuintessenceAS'
+    TQuintessenceModel_PythonClass = 'QuintessenceModel'
 
-    end function TEarlyQuintessenceAS_PythonClass
+    end function TQuintessenceModel_PythonClass
 
-    subroutine TEarlyQuintessenceAS_SelfPointer(cptr,P)
+    subroutine TQuintessenceModel_SelfPointer(cptr,P)
     use iso_c_binding
     Type(c_ptr) :: cptr
-    Type (TEarlyQuintessenceAS), pointer :: PType
+    Type (TQuintessenceModel), pointer :: PType
     class (TPythonInterfacedClass), pointer :: P
 
     call c_f_pointer(cptr, PType)
     P => PType
 
-    end subroutine TEarlyQuintessenceAS_SelfPointer
+    end subroutine TQuintessenceModel_SelfPointer
 
 
 
