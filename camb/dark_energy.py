@@ -204,6 +204,7 @@ class EarlyQuintessence(Quintessence):
         ("fde", AllocatableArrayDouble, "after initialized, the calculated background early dark energy "
                                         "fractions at sampled_a"),
         ("__ddfde", AllocatableArrayDouble)
+
     ]
     _fortran_class_name_ = 'TEarlyQuintessence'
 
@@ -233,24 +234,26 @@ class QuintessenceModel(Quintessence):
                         " used for tuning to get correct DE density today"),
         ("theta_i", c_double, "phi_init initial field value"),
         ("frac_lambda0", c_double, "fraction of dark energy in cosmological constant today"),
-        ("use_zc", c_bool, "solve for f, m to get specific critical reshift zc and fde_zc"),
-        ("zc", c_double, "reshift of peak fractional early dark energy density"),
-        ("fde_zc", c_double, "fraction of early dark energy density to total at peak"),
+        # ("use_zc", c_bool, "solve for f, m to get specific critical reshift zc and fde_zc"),
+        # ("zc", c_double, "reshift of peak fractional early dark energy density"),
+        # ("fde_zc", c_double, "fraction of early dark energy density to total at peak"),
         ("npoints", c_int, "number of points for background integration spacing"),
         ("min_steps_per_osc", c_int, "minimumum number of steps per background oscillation scale"),
         ("model_idx", c_int, "which quintessence model (VofPhi) to use"),                
         ("fde", AllocatableArrayDouble, "after initialized, the calculated background early dark energy "
                                         "fractions at sampled_a"),
-        ("__ddfde", AllocatableArrayDouble)
+        ("__ddfde", AllocatableArrayDouble),
+        ("omega_tol", c_double, "tolerance for omega_DE tuning"),
+        ("atol", c_double, "scale factor ")
     ] # type: ignore
     _fortran_class_name_ = 'TQuintessenceModel'
 
-    def set_params(self, n, V0=1e-10, theta_i=0.0,frac_lambda0=0.,model_idx=1,use_zc=False):
+    def set_params(self, n, V0=1e-8, theta_i=0.0,frac_lambda0=0.,model_idx=1,use_zc=False):
         self.n = n
         self.V0 = V0
         self.theta_i = theta_i
         self.frac_lambda0 = frac_lambda0
-        self.use_zc = use_zc
+        # self.use_zc = use_zc
         self.model_idx = model_idx
 
 # short names for models that support w/wa

@@ -58,7 +58,7 @@
     ! The specific parameterization of the potential implemented is the axion model of arXiv:1908.06995
     type, extends(TQuintessence) :: TEarlyQuintessence
         real(dl) :: n = 3._dl
-        real(dl) :: f =0.05 ! sqrt(8*pi*G)*f
+        real(dl) :: f = 0.05 ! sqrt(8*pi*G)*f
         real(dl) :: m = 5d-54 !m in reduced Planck mass units
         real(dl) :: theta_i = 3.1_dl !initial value of phi/f
         real(dl) :: frac_lambda0 = 1._dl !fraction of dark energy density that is cosmological constant today
@@ -81,17 +81,17 @@
 
     type, extends(TQuintessence) :: TQuintessenceModel ! adding a new class for the pure exponential potential
         real(dl) :: n = 1_dl
-        real(dl) :: V0 = 1e-10 !m in reduced Planck mass units
+        real(dl) :: V0 = 1e-8 !m in reduced Planck mass units
         real(dl) :: theta_i = 0_dl !initial field value
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
-        logical :: use_zc = .false. !adjust m to fit zc
-        real(dl) :: zc, fde_zc !readshift for peak f_de and f_de at that redshift
+        ! logical :: use_zc = .false. !adjust m to fit zc
+        ! real(dl) :: zc, fde_zc !redshift for peak f_de and f_de at that redshift
         integer :: npoints = 6000 !baseline number of log a steps; will be increased if needed when there are oscillations
-        real(dl) :: omega_tol = 1d-5 !tolerance for OmegaDE
-        real(dl) :: atol = 1e-8_dl
         integer :: min_steps_per_osc = 10
         integer :: model_idx = 1 ! which quintessence model (VofPhi) to use
         real(dl), dimension(:), allocatable :: fde, ddfde
+        real(dl) :: omega_tol = 1d-5 !tolerance for OmegaDE
+        real(dl) :: atol = 1e-8_dl
     contains
     procedure :: Vofphi => TQuintessenceModel_VofPhi
     procedure :: Init => TQuintessenceModel_Init
@@ -777,8 +777,6 @@
 
 
 
-    !------------Exponential Potential Functions-------------!
-
     function TQuintessenceModel_VofPhi(this, phi, deriv) result(VofPhi)
     !The input variable phi is sqrt(8*Pi*G)*psi
     !Returns (8*Pi*G)^(1-deriv/2)*d^{deriv}V(psi)/d^{deriv}psi evaluated at psi
@@ -786,12 +784,23 @@
     class(TQuintessenceModel) :: this
     real(dl) phi,Vofphi
     integer deriv
-    real(dl) theta
+    real(dl) theta, costheta, sintheta
     real(dl), parameter :: units = MPC_in_sec**2 /Tpl**2  !convert to units of 1/Mpc^2
     ! Assume f = sqrt(kappa)*f_theory = f_theory/M_pl
     ! m = m_theory/M_Pl
     theta = phi
-    if (this%model_idx==3) then !FT Hilltop
+    if (this%model_idx==4) then !Cosine, n = f
+        theta = phi/this%n ! = phi/f
+        costheta = cos(theta)
+        sintheta = sin(theta)
+        if (deriv==0) then
+            Vofphi = this%V0*(1 - costheta)+ this%frac_lambda0*this%State%grhov
+        else if (deriv ==1) then
+            Vofphi = this%V0*sintheta/(this%n)
+        else if (deriv ==2) then
+            Vofphi = this%V0*costheta/(this%n)**2
+        end if
+    elseif (this%model_idx==3) then !FT Hilltop, n = phi0
         if (deriv==0) then 
             Vofphi = this%V0*(1 - (theta/this%n)**2 ) + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
         else if (deriv ==1) then
@@ -799,7 +808,7 @@
         else if (deriv ==2) then
             Vofphi = -2*this%V0 / (this%n)**2
         end if
-    elseif (this%model_idx==2) then !Sugra Hilltop
+    elseif (this%model_idx==2) then !Sugra Hilltop, n = alpha
         if (deriv==0) then 
             Vofphi = this%V0*exp(-sqrt(2.)*theta)*exp(-2.*this%n*exp(sqrt(2.)*theta))*(1.+4.*this%n**2*exp(2.*sqrt(2.)*theta)-3.+4.*this%n*exp(sqrt(2.)*theta))
         else if (deriv ==1) then
@@ -807,7 +816,7 @@
         else if (deriv ==2) then
             Vofphi = 4.*exp(-2.*exp(sqrt(2.)*theta)*this%n-sqrt(2.)*theta)*(-1.-2.*exp(sqrt(2.)*theta)*this%n-6.*exp(2.*sqrt(2.)*theta)*this%n**2-4.*exp(3.*sqrt(2.)*theta)*this%n**3+8.*exp(4.*sqrt(2.)*theta)*this%n**4)*this%V0
         end if
-    elseif (this%model_idx==1) then !Exponential Quintessence 
+    elseif (this%model_idx==1) then !Exponential Quintessence, n = lambda
         if (deriv==0) then 
             Vofphi = this%V0*exp(-this%n*theta) + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
         else if (deriv ==1) then
@@ -839,6 +848,18 @@
     Type(TTimer) :: Timer
     Type(TNEWUOA) :: Minimize
     real(dl) log_params(2), param_min(2), param_max(2)
+
+    if (this%model_idx==4) then !Cosine, n = f
+        write (*,*)  'Cosine potential' ! = phi/f
+    elseif (this%model_idx==3) then !FT Hilltop, n = phi0
+        write (*,*)  'FT Hilltop' 
+    elseif (this%model_idx==2) then !Sugra Hilltop, n = alpha
+        write (*,*)  'Sugra Hilltop' 
+    elseif (this%model_idx==1) then !Exponential Quintessence, n = lambda
+        write (*,*)  'Exponential' 
+    else 
+        stop 'Must provide a valid Quintessence model to use'
+    end if
 
     !Make interpolation table, etc,
     !At this point massive neutrinos have been initialized
@@ -905,8 +926,8 @@
     ! --------------- method 2 for initial conditions tuning V0 using Binary search ------------------------------
     this%V0 = 1d-6
     om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
-    logV0_low = -15.0_dl
-    logV0_high = 5_dl
+    logV0_low = -20.0_dl
+    logV0_high = 20_dl
     logV0 = this%V0
     if (FeedbackLevel > 1) write (*,*)  'required DE, first trial:', this%State%omega_de, om1
     if (abs(om1-this%State%omega_de) > this%omega_tol) then
@@ -1247,6 +1268,10 @@
     class(TIniFile), intent(in) :: Ini
 
     call this%TDarkEnergyModel%ReadParams(Ini)
+    this%V0 = Ini%Read_Double('V0', 1d-10)
+    this%n = Ini%Read_Double('nq', 1.d0)
+    this%theta_i = Ini%Read_Double('theta_i',0.d0)
+    this%model_idx = Ini%Read_Int('qmodel',1)
 
     end subroutine TQuintessenceModel_ReadParams
 
