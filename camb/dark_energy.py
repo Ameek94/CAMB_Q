@@ -3,13 +3,13 @@ from .baseconfig import F2003Class, fortran_class, numpy_1d, CAMBError, np, \
 from ctypes import c_int, c_double, byref, POINTER, c_bool
 
 
-def order_transform(x,min=0.,max=1.):
-    N = len(x)
-    t = np.zeros(N)
-    t[N-1] = x[N-1]**(1./N)
-    for n in range(N-2, -1, -1):
-        t[n] = x[n]**(1./(n+1)) * t[n+1]
-    return t*(max-min) + min
+# def order_transform(x,min=0.,max=1.):
+#     N = len(x)
+#     t = np.zeros(N)
+#     t[N-1] = x[N-1]**(1./N)
+#     for n in range(N-2, -1, -1):
+#         t[n] = x[n]**(1./(n+1)) * t[n+1]
+#     return t*(max-min) + min
 
 class DarkEnergyModel(F2003Class):
     """
@@ -253,7 +253,7 @@ class QuintessenceSpline(Quintessence):
         ("V5", c_double, "potential V(phi) at nodes"),
         ("V6", c_double, "potential V(phi) at nodes"),
         ("lengthscale", c_double, "length scale for spline interpolation of VofPhi"),
-        ("do_ordering", c_bool, "if True, order phi and V values before spline interpolation"),
+        # ("do_ordering", c_bool, "if True, order phi and V values before spline interpolation"),
         ("V0", c_double, "Overall potential amplitude "
                         " used for tuning to get correct DE density today"),
         ("theta_i", c_double, "phi_init initial field value"),
@@ -273,19 +273,16 @@ class QuintessenceSpline(Quintessence):
     _fortran_class_name_ = 'TQuintessenceSpline'
 
     def set_params(self, nspline=4, 
-                #    phimin, phimax, 
                    phi1=0., phi2=0., phi3=0., phi4=0., phi5=0., phi6=0., 
-                   V1=1., V2=1., V3=1., V4=1., V5=1., V6=1., lengthscale=1.,do_ordering=True,
+                   V1=1., V2=1., V3=1., V4=1., V5=1., V6=1., lengthscale=1.,
                    V0=1e-8, theta_i=0.0,frac_lambda0=0.):
         self.nspline = nspline
         # self.phimin = phimin
         # self.phimax = phimax
-        self.V0 = V0
-        self.theta_i = theta_i
         self.phi1 = phi1
-        # self.phi2 = phi2
-        # self.phi3 = phi3
-        # self.phi4 = phi4
+        self.phi2 = phi2
+        self.phi3 = phi3
+        self.phi4 = phi4
         self.phi5 = phi5
         self.phi6 = phi6
         self.V1 = V1
@@ -295,6 +292,9 @@ class QuintessenceSpline(Quintessence):
         self.V5 = V5
         self.V6 = V6
         self.lengthscale = lengthscale
+        self.V0 = V0
+        self.theta_i = theta_i
+        # self.do_ordering = do_ordering
         self.frac_lambda0 = frac_lambda0
         # self.use_zc = use_zc
 

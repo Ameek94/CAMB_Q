@@ -16,7 +16,7 @@ theory:
       V1: 1.01
       V5: 0.0
       V6: 0.0      
-      # do_order_transform: true
+      # do_ordering: true
       theta_H0_range:
       - 10
       - 200

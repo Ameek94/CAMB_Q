@@ -16,7 +16,7 @@ theory:
       V1: 1.01
       V5: 0.0
       V6: 0.0      
-      # do_order_transform: true
+      # do_ordering: true
       theta_H0_range:
       - 10
       - 200
@@ -170,12 +170,12 @@ sampler:
   #   oversample_power: 0.4
   #   proposal_scale: 1.9
   #   covmat: auto
-  #   Rminus1_stop: 0.05
+  #   Rminus1_stop: 0.1
   #   Rminus1_cl_stop: 0.2
   #   max_tries: 10000
   # polychord:
-  #   nlive: 20d
-  #   precision_criterion: 0.05
+  #   nlive: 25d
+  #   precision_criterion: 0.1
   minimize:
     method: scipy
     best_of: 4 
