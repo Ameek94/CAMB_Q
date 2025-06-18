@@ -148,7 +148,7 @@
     ! Compute transformed values in reverse order
     t(N) = x(N)**(1.0d0 / N)
     do i = N-1, 2, -1
-        t(n) = x(i)**(1.0d0 / i) * t(i+1)
+        t(i) = x(i)**(1.0d0 / i) * t(i+1)
     end do
 
     ! Scale to [lo, hi]
