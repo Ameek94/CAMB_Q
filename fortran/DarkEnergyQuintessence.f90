@@ -23,6 +23,7 @@
     use constants
     use classes
     use Interpolation
+    use GaussianPotential
     implicit none
     private
 
@@ -79,8 +80,14 @@
     procedure :: calc_zc_fde
     end type TEarlyQuintessence
 
-    type, extends(TQuintessence) :: TQuintessenceModel ! adding a new class for the pure exponential potential
-        real(dl) :: n = 1_dl
+    type, extends(TQuintessence) :: TQuintessenceSpline ! adding a new class for the pure exponential potential
+        integer :: nspline = 4 !number of points in spline
+        ! real(dl) :: phimin = 0_dl
+        ! real(dl) :: phimax = 1_dl !range of phi for spline
+        real(dl) :: phi1, phi2, phi3, phi4, phi5, phi6 !nodes for spline
+        real(dl) :: V1, V2, V3, V4, V5, V6 !potential at nodes
+        real(dl) :: lengthscale = 0.5_dl !length scale for RBF kernel
+        logical :: do_ordering = .true. !whether to order the nodes in phi
         real(dl) :: V0 = 1e-8 !m in reduced Planck mass units
         real(dl) :: theta_i = 0_dl !initial field value
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
@@ -88,27 +95,69 @@
         ! real(dl) :: zc, fde_zc !redshift for peak f_de and f_de at that redshift
         integer :: npoints = 6000 !baseline number of log a steps; will be increased if needed when there are oscillations
         integer :: min_steps_per_osc = 10
-        integer :: model_idx = 1 ! which quintessence model (VofPhi) to use
         real(dl), dimension(:), allocatable :: fde, ddfde
         real(dl) :: omega_tol = 1d-5 !tolerance for OmegaDE
         real(dl) :: atol = 1e-8_dl
+        type(GPotentialRBF_type) :: gp
     contains
-    procedure :: Vofphi => TQuintessenceModel_VofPhi
-    procedure :: Init => TQuintessenceModel_Init
-    procedure :: ReadParams =>  TQuintessenceModel_ReadParams
-    procedure, nopass :: PythonClass => TQuintessenceModel_PythonClass
-    procedure, nopass :: SelfPointer => TQuintessenceModel_SelfPointer
+    procedure :: Vofphi => TQuintessenceSpline_VofPhi
+    procedure :: Init => TQuintessenceSpline_Init
+    procedure :: ReadParams =>  TQuintessenceSpline_ReadParams
+    procedure, nopass :: order_transform
+    procedure, nopass :: PythonClass => TQuintessenceSpline_PythonClass
+    procedure, nopass :: SelfPointer => TQuintessenceSpline_SelfPointer
     ! procedure, private :: fdeAtaQ
     ! procedure, private :: fde_peakQ
     procedure, private :: check_errorQ
     ! procedure :: calc_zc_fdeQ
 
-    end type TQuintessenceModel
+    end type TQuintessenceSpline
 
     procedure(TClassDverk) :: dverk
 
-    public TQuintessence, TEarlyQuintessence,TQuintessenceModel
+    public TQuintessence, TEarlyQuintessence,TQuintessenceSpline
     contains
+
+    subroutine order_transform(x, t, N, minval, maxval)
+    implicit none
+    integer, intent(in) :: N
+    real(kind=8), intent(in) :: x(N)
+    real(kind=8), intent(out) :: t(N)
+    real(kind=8), intent(in), optional :: minval, maxval
+    real(kind=8) :: lo, hi
+    integer :: i
+
+    if (FeedbackLevel > 1) then
+        write(*,*) 'Doing ordering transform, N = ', N
+        write(*,*) 'order_transform: x = ', x
+        write(*,*) 'order_transform: t = ', t
+    end if
+
+    ! Set default min and max if not provided
+    if (present(minval)) then
+        lo = minval
+    else
+        lo = 0.0d0
+    end if
+    if (present(maxval)) then
+        hi = maxval
+    else
+        hi = 1.0d0
+    end if
+
+    ! Compute transformed values in reverse order
+    t(N) = x(N)**(1.0d0 / N)
+    do i = N-1, 2, -1
+        t(n) = x(i)**(1.0d0 / i) * t(i+1)
+    end do
+
+    ! Scale to [lo, hi]
+    t(1) = x(1) 
+    do i = 2, N
+        t(i) = t(i) * (hi - lo) + lo
+    end do
+
+    end subroutine order_transform
 
     function VofPhi(this, phi, deriv)
     !Get the quintessence potential as function of phi
@@ -225,7 +274,7 @@
     class(TQuintessence) :: this
     real(dl) :: phi
 
-    TQuintessence_phidot_start = 0
+    TQuintessence_phidot_start = 1d-10!0_dl
 
     end function TQuintessence_phidot_start
 
@@ -776,62 +825,34 @@
     end subroutine TEarlyQuintessence_SelfPointer
 
 
+!   ! Quintessence spline model
 
-    function TQuintessenceModel_VofPhi(this, phi, deriv) result(VofPhi)
+    function TQuintessenceSpline_VofPhi(this, phi, deriv) result(Vout)
     !The input variable phi is sqrt(8*Pi*G)*psi
     !Returns (8*Pi*G)^(1-deriv/2)*d^{deriv}V(psi)/d^{deriv}psi evaluated at psi
     !return result is in 1/Mpc^2 units [so times (Mpc/c)^2 to get units in 1/Mpc^2]
-    class(TQuintessenceModel) :: this
-    real(dl) phi,Vofphi
-    integer deriv
-    real(dl) theta, costheta, sintheta
-    real(dl), parameter :: units = MPC_in_sec**2 /Tpl**2  !convert to units of 1/Mpc^2
-    ! Assume f = sqrt(kappa)*f_theory = f_theory/M_pl
-    ! m = m_theory/M_Pl
-    theta = phi
-    if (this%model_idx==4) then !Cosine, n = f
-        theta = phi/this%n ! = phi/f
-        costheta = cos(theta)
-        sintheta = sin(theta)
-        if (deriv==0) then
-            Vofphi = this%V0*(1 - costheta)+ this%frac_lambda0*this%State%grhov
-        else if (deriv ==1) then
-            Vofphi = this%V0*sintheta/(this%n)
-        else if (deriv ==2) then
-            Vofphi = this%V0*costheta/(this%n)**2
-        end if
-    elseif (this%model_idx==3) then !FT Hilltop, n = phi0
-        if (deriv==0) then 
-            Vofphi = this%V0*(1 - (theta/this%n)**2 ) + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
-        else if (deriv ==1) then
-            Vofphi = -2*this%V0 * theta/ (this%n)**2  !units*this%m**2*this%f*this%n*(1 - cos(theta))**(this%n-1)*sin(theta)
-        else if (deriv ==2) then
-            Vofphi = -2*this%V0 / (this%n)**2
-        end if
-    elseif (this%model_idx==2) then !Sugra Hilltop, n = alpha
-        if (deriv==0) then 
-            Vofphi = this%V0*exp(-sqrt(2.)*theta)*exp(-2.*this%n*exp(sqrt(2.)*theta))*(1.+4.*this%n**2*exp(2.*sqrt(2.)*theta)-3.+4.*this%n*exp(sqrt(2.)*theta))
-        else if (deriv ==1) then
-            Vofphi = -2.*sqrt(2.)*exp(-2.*exp(sqrt(2.)*theta)*this%n-sqrt(2.)*theta)*(-1.-2.*exp(sqrt(2.)*theta)*this%n+2.*exp(2.*sqrt(2.)*theta)*this%n**2+4.*exp(3.*sqrt(2.)*theta)*this%n**3)*this%V0
-        else if (deriv ==2) then
-            Vofphi = 4.*exp(-2.*exp(sqrt(2.)*theta)*this%n-sqrt(2.)*theta)*(-1.-2.*exp(sqrt(2.)*theta)*this%n-6.*exp(2.*sqrt(2.)*theta)*this%n**2-4.*exp(3.*sqrt(2.)*theta)*this%n**3+8.*exp(4.*sqrt(2.)*theta)*this%n**4)*this%V0
-        end if
-    elseif (this%model_idx==1) then !Exponential Quintessence, n = lambda
-        if (deriv==0) then 
-            Vofphi = this%V0*exp(-this%n*theta) + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
-        else if (deriv ==1) then
-            Vofphi = -this%V0*this%n*exp(-this%n*theta) !units*this%m**2*this%f*this%n*(1 - cos(theta))**(this%n-1)*sin(theta)
-        else if (deriv ==2) then
-            Vofphi = this%V0*this%n**2*exp(-this%n*theta)
-        end if
-    else 
-        stop 'Must provide a valid Quintessence model to use'
-    end if
-    end function TQuintessenceModel_VofPhi
+    class(TQuintessenceSpline) :: this
+    real(dl) :: phi
+    integer :: deriv
+    real(dl) :: Vout
 
-    subroutine TQuintessenceModel_Init(this, State)
+    select case(deriv)
+      case (0)
+        Vout = this%V0 * this%gp%V(phi)         ! calls SplinePotential%V
+      case (1)
+        Vout = this%V0 *  this%gp%Vd(phi)        ! calls SplinePotential%Vd
+      case (2)
+        Vout = this%V0 *  this%gp%Vdd(phi)       ! calls SplinePotential%Vdd
+      case default
+        stop 'Invalid deriv in spline VofPhi'
+      end select
+    !   convert to 1/Mpc^2 units as before
+  end function TQuintessenceSpline_VofPhi
+
+    subroutine TQuintessenceSpline_Init(this, State)
     use Powell
-    class(TQuintessenceModel), intent(inout) :: this
+    use GaussianPotential
+    class(TQuintessenceSpline), intent(inout) :: this
     class(TCAMBdata), intent(in), target :: State
     real(dl) aend, afrom
     integer, parameter ::  NumEqs=2
@@ -840,7 +861,7 @@
     real(dl), parameter :: splZero = 0._dl
     real(dl) lastsign, da_osc, last_a, a_c
     real(dl) initial_phi, initial_phidot, a2, logV0_in, logV0, logV0_1, logV0_2,logV0_low, logV0_high, deltalogV0, V0_input, om,om1,om2,atol,astart
-    real(dl), dimension(:), allocatable :: sampled_a, phi_a, phidot_a, fde
+    real(dl), dimension(:), allocatable :: sampled_a, phi_a, phidot_a, fde, phi_train, V_train, ordered_phi_train
     integer npoints, tot_points, max_ix
     logical has_peak, OK
     real(dl) fzero, xzero
@@ -849,17 +870,46 @@
     Type(TNEWUOA) :: Minimize
     real(dl) log_params(2), param_min(2), param_max(2)
 
-    if (this%model_idx==4) then !Cosine, n = f
-        write (*,*)  'Cosine potential' ! = phi/f
-    elseif (this%model_idx==3) then !FT Hilltop, n = phi0
-        write (*,*)  'FT Hilltop' 
-    elseif (this%model_idx==2) then !Sugra Hilltop, n = alpha
-        write (*,*)  'Sugra Hilltop' 
-    elseif (this%model_idx==1) then !Exponential Quintessence, n = lambda
-        write (*,*)  'Exponential' 
-    else 
-        stop 'Must provide a valid Quintessence model to use'
+    allocate(phi_train(this%nspline), V_train(this%nspline),ordered_phi_train(this%nspline))
+
+    phi_train(1) = this%phi1
+    phi_train(2) = this%phi2
+    phi_train(3) = this%phi3
+    phi_train(4) = this%phi4
+    phi_train(5) = this%phi5
+    phi_train(6) = this%phi6
+
+    V_train(1) = this%V1
+    V_train(2) = this%V2
+    V_train(3) = this%V3
+    V_train(4) = this%V4
+    V_train(5) = this%V5
+    V_train(6) = this%V6
+
+    ! reflect V around phi=0 to get a symmetric potential
+
+    ! print phi_train, V_train
+    if (FeedbackLevel > 0) then
+        write (*,'(A)') 'Initializing spline potential with phi_train, V_train, lengthscale'
+        write (*,*) ' Nspline = ', this%nspline
+        write (*,*) ' phi_train',  phi_train
+        write (*,*) ' V_train', V_train
+        write (*,*) 'Lengthscale', this%lengthscale
     end if
+
+    ! order the spline nodes if ordering is requested
+    if (this%do_ordering) then
+        call this%order_transform(phi_train, ordered_phi_train, this%nspline)
+        if (FeedbackLevel > 0) then
+            write (*,'(A)') 'After ordering phi_train'
+            write (*,*) ' phi_train',  ordered_phi_train
+        end if
+    end if
+
+
+
+
+    call this%gp%init(phi_train(1:this%nspline),V_train(1:this%nspline),this%lengthscale)
 
     !Make interpolation table, etc,
     !At this point massive neutrinos have been initialized
@@ -879,7 +929,7 @@
     end if
     allocate(phi_a(npoints),phidot_a(npoints), sampled_a(npoints), fde(npoints))
 
-    if (FeedbackLevel > 0) write (*,'(A, 2ES10.2)') 'Initial values received for V0, n = ', this%V0,this%n ! just for testing 
+    if (FeedbackLevel > 0) write (*,'(A, 2ES10.2)') 'Initial values received for V0 = ', this%V0 ! just for testing 
 
     initial_phi = this%theta_i
     astart = this%astart
@@ -924,10 +974,10 @@
 
 
     ! --------------- method 2 for initial conditions tuning V0 using Binary search ------------------------------
-    this%V0 = 1d-6
+    ! this%V0 = 1d-6
     om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
-    logV0_low = -20.0_dl
-    logV0_high = 20_dl
+    logV0_low = -50.0_dl
+    logV0_high = 50_dl
     logV0 = this%V0
     if (FeedbackLevel > 1) write (*,*)  'required DE, first trial:', this%State%omega_de, om1
     if (abs(om1-this%State%omega_de) > this%omega_tol) then
@@ -1091,15 +1141,15 @@
     !     write(*,*) 'TEarlyQuintessence zc, fde used', this%zc, this%fde_zc
     ! end if
 
-    end subroutine TQuintessenceModel_Init
+    end subroutine TQuintessenceSpline_Init
 
     logical function check_errorQ(this, afrom, aend)
-    class(TQuintessenceModel) :: this
+    class(TQuintessenceSpline) :: this
     real(dl) afrom, aend
 
     if (global_error_flag/=0) then
-        write(*,*) 'TQuintessenceModel error integrating', afrom, aend
-        write(*,*) this%n, this%V0, this%theta_i
+        write(*,*) 'TQuintessenceSpline error integrating', afrom, aend
+        write(*,*) this%V0, this%theta_i
         stop
         check_errorQ = .false.
         return
@@ -1179,7 +1229,7 @@
     ! end function match_fde_zc
 
     ! subroutine calc_zc_fdeQ(this, z_c, fde_zc)
-    ! class(TQuintessenceModel), intent(inout) :: this
+    ! class(TQuintessenceSpline), intent(inout) :: this
     ! real(dl), intent(out) :: z_c, fde_zc
     ! real(dl) aend, afrom
     ! integer, parameter ::  NumEqs=2
@@ -1252,7 +1302,7 @@
     ! end subroutine calc_zc_fdeQ
 
     ! function fdeAtaQ(this,a)
-    ! class(TQuintessenceModel) :: this
+    ! class(TQuintessenceSpline) :: this
     ! real(dl), intent(in) :: a
     ! real(dl) fdeAtaQ, aphi, aphidot, a2
 
@@ -1262,37 +1312,51 @@
     !     /(a2*(0.5d0* aphidot**2 + a2*this%Vofphi(aphi,0))) + 1)
     ! end function fdeAtaQ
 
-    subroutine TQuintessenceModel_ReadParams(this, Ini)
+    subroutine TQuintessenceSpline_ReadParams(this, Ini)
     use IniObjects
-    class(TQuintessenceModel) :: this
+    class(TQuintessenceSpline) :: this
     class(TIniFile), intent(in) :: Ini
 
     call this%TDarkEnergyModel%ReadParams(Ini)
+    this%nspline = Ini%Read_Int('nspline', 4)
+    ! this%phimin = Ini%Read_Double('phimin', 0.d0)
+    ! this%phimax = Ini%Read_Double('phimax', 1.d0)
     this%V0 = Ini%Read_Double('V0', 1d-10)
-    this%n = Ini%Read_Double('nq', 1.d0)
     this%theta_i = Ini%Read_Double('theta_i',0.d0)
-    this%model_idx = Ini%Read_Int('qmodel',1)
+    this%phi1 = Ini%Read_Double('phi1', 0.1d0)
+    this%phi2 = Ini%Read_Double('phi2', 0.2d0)
+    this%phi3 = Ini%Read_Double('phi3', 0.3d0)
+    this%phi4 = Ini%Read_Double('phi4', 0.4d0)
+    this%phi5 = Ini%Read_Double('phi5', 0.5d0)
+    this%phi6 = Ini%Read_Double('phi6', 0.6d0)
+    this%V1 = Ini%Read_Double('V1', 0.1d0)
+    this%V2 = Ini%Read_Double('V2', 0.2d0)
+    this%V3 = Ini%Read_Double('V3', 0.3d0)
+    this%V4 = Ini%Read_Double('V4', 0.4d0)  
+    this%V5 = Ini%Read_Double('V5', 0.5d0)
+    this%V6 = Ini%Read_Double('V6', 0.6d0)
+    this%lengthscale = Ini%Read_Double('lengthscale', 0.5_dl)
 
-    end subroutine TQuintessenceModel_ReadParams
+    end subroutine TQuintessenceSpline_ReadParams
 
 
-    function TQuintessenceModel_PythonClass()
-    character(LEN=:), allocatable :: TQuintessenceModel_PythonClass
+    function TQuintessenceSpline_PythonClass()
+    character(LEN=:), allocatable :: TQuintessenceSpline_PythonClass
 
-    TQuintessenceModel_PythonClass = 'QuintessenceModel'
+    TQuintessenceSpline_PythonClass = 'QuintessenceSpline'
 
-    end function TQuintessenceModel_PythonClass
+    end function TQuintessenceSpline_PythonClass
 
-    subroutine TQuintessenceModel_SelfPointer(cptr,P)
+    subroutine TQuintessenceSpline_SelfPointer(cptr,P)
     use iso_c_binding
     Type(c_ptr) :: cptr
-    Type (TQuintessenceModel), pointer :: PType
+    Type (TQuintessenceSpline), pointer :: PType
     class (TPythonInterfacedClass), pointer :: P
 
     call c_f_pointer(cptr, PType)
     P => PType
 
-    end subroutine TQuintessenceModel_SelfPointer
+    end subroutine TQuintessenceSpline_SelfPointer
 
 
 
