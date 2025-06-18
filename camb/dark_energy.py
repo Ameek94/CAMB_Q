@@ -121,6 +121,23 @@ class DarkEnergyPPF(DarkEnergyEqnOfState):
     _fortran_class_module_ = 'DarkEnergyPPF'
     _fortran_class_name_ = 'TDarkEnergyPPF'
 
+@fortran_class
+class DarkEnergyDSParam(DarkEnergyModel):
+    """
+    DS parametrization
+    """
+    _fields_ = [
+        ("w_0", c_double, "present day equation of state"),
+        ("K_DS", c_double, "DS slope parameter K"),
+        ("zcut",c_double,"redshift to cut off the parametrisation")]
+
+    _fortran_class_module_ = 'DarkEnergyFluid'
+    _fortran_class_name_ = 'TDarkEnergyDSParam'
+
+    def set_params(self, w_0=-1., K_DS=5.,zcut=10.):
+        self.w_0 = w_0
+        self.K_DS = K_DS
+        self.zcut = zcut
 
 @fortran_class
 class AxionEffectiveFluid(DarkEnergyModel):

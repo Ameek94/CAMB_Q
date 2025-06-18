@@ -4,6 +4,7 @@
     use results
     use constants
     use classes
+    use MathUtils
     implicit none
 
     type, extends(TDarkEnergyEqnOfState) :: TDarkEnergyFluid
@@ -17,6 +18,31 @@
     procedure :: PerturbedStressEnergy => TDarkEnergyFluid_PerturbedStressEnergy
     procedure :: PerturbationEvolve => TDarkEnergyFluid_PerturbationEvolve
     end type TDarkEnergyFluid
+
+    ! AM - added this ! to be changed to fluid for perturbations module
+    type, extends(TDarkEnergyModel) :: TDarkEnergyDSParam
+        real(dl) :: w_0
+        real(dl) :: K_DS
+        real(dl) :: zcut ! redshift below which DE is negligible
+        real(dl) :: Omega_de
+        real(dl) :: acut
+        real(dl) :: grhode_cut = 0 ! grhode factor at cutoff
+
+        ! real(dl) :: Kmin = 1.
+        !comoving sound speed is always exactly 1 for quintessence
+        !(otherwise assumed constant, though this is almost certainly unrealistic)
+    contains
+    ! procedure :: ReadParams => TDarkEnergyFluid_ReadParams
+    procedure, nopass :: PythonClass => TDarkEnergyDSParam_PythonClass
+    procedure, nopass :: SelfPointer => TDarkEnergyDSParam_SelfPointer
+    procedure :: Init => TDarkEnergyDSParam_Init
+    procedure, public :: w_de => TDarkEnergyDSParam_w_de
+    procedure :: grho_de => TDarkEnergyDSParam_grho_de
+    procedure, private :: wde_integrand
+    ! procedure, private :: wde_integrand_vec
+    ! procedure :: PerturbedStressEnergy => TDarkEnergyFluid_PerturbedStressEnergy
+    ! procedure :: PerturbationEvolve => TDarkEnergyFluid_PerturbationEvolve
+    end type TDarkEnergyDSParam
 
     !Example implementation of fluid model using specific analytic form
     !(approximate effective axion fluid model from arXiv:1806.10608, with c_s^2=1 if n=infinity (w_n=1))
@@ -72,6 +98,26 @@
 
     end subroutine TDarkEnergyFluid_SelfPointer
 
+    ! ! AM - added DS param
+    function TDarkEnergyDSParam_PythonClass()
+    character(LEN=:), allocatable :: TDarkEnergyDSParam_PythonClass
+
+    TDarkEnergyDSParam_PythonClass = 'DarkEnergyFluidDS'
+
+    end function TDarkEnergyDSParam_PythonClass
+
+    ! AM - added DS param
+    subroutine TDarkEnergyDSParam_SelfPointer(cptr,P)
+    use iso_c_binding
+    Type(c_ptr) :: cptr
+    Type (TDarkEnergyDSParam), pointer :: PType
+    class (TPythonInterfacedClass), pointer :: P
+
+    call c_f_pointer(cptr, PType)
+    P => PType
+
+    end subroutine TDarkEnergyDSParam_SelfPointer
+
     subroutine TDarkEnergyFluid_Init(this, State)
     use classes
     class(TDarkEnergyFluid), intent(inout) :: this
@@ -94,6 +140,125 @@
 
     end subroutine TDarkEnergyFluid_Init
 
+    ! ! AM - added this --- for DS set redshift cutoff after which wde = -1
+    subroutine TDarkEnergyDSParam_Init(this, State)
+    use classes
+    class(TDarkEnergyDSParam), intent(inout) :: this
+    class(TCAMBdata), intent(in), target :: State
+    real(dl) :: fac
+    real(dl) :: tol = 1e-6
+
+    this%is_cosmological_constant = .false.
+    this%num_perturb_equations = 0 ! 2
+
+    ! call this%TDarkEnergyEqnOfState%Init(State)
+
+    this%acut = 1/(1+this%zcut)
+
+    select type(State)
+    class is (CAMBdata)
+        this%Omega_de = State%Omega_de
+        ! this%grhocrit = State%grhocrit
+    end select
+
+    ! if (this%is_cosmological_constant) then
+    !     this%num_perturb_equations = 0
+    ! else
+    !     ! if (this%use_tabulated_w) then
+    !     !     if (any(this%equation_of_state%F<-1) .and. any(this%equation_of_state%F>-1)) &
+    !     !         error stop 'Fluid dark energy model does not allow w crossing -1'
+    !     ! elseif (this%wa/=0 .and. &
+    !     !     ((1+this%w_lam < -1.e-6_dl) .or. 1+this%w_lam + this%wa < -1.e-6_dl)) then
+    !     !     error stop 'Fluid dark energy model does not allow w crossing -1'
+    !     ! end if
+    
+    ! end if
+
+    ! write (*,*) 'Initialised DS Param, a_cut, w0 and K = ', this%acut, this%w_0, this%K_DS
+
+    ! fac = exp(Integrate_Trapz(this,wde_integrand,1._dl,0.5_dl,1000))
+    
+    ! write (*,*) 'Trapz test, for a = 0.5, = ', fac
+    
+    ! fac = exp(Integrate_Trapz(this,wde_integrand,1._dl,0.2_dl,1000))
+
+    ! write (*,*) 'Trapz test, for a = 0.2, = ', fac
+
+    fac = Integrate_Trapz(this,wde_integrand,1._dl,this%acut,200)
+
+    ! fac = Integrate_Romberg(this,wde_integrand,1._dl,this%acut,tol)
+
+    this%grhode_cut = exp(fac)
+
+    end subroutine TDarkEnergyDSParam_Init
+
+    ! ! AM - added this
+    function TDarkEnergyDSParam_w_de(this, a) result(w_de_DS)
+    class(TDarkEnergyDSParam) :: this
+    real(dl) :: w_de_DS, al, den_DS, num_DS, K, Fa, F0
+    real(dl), intent(IN) :: a
+
+    if (a<this%acut) then
+        w_de_DS = -1. !
+    else
+        K = this%K_DS
+        Fa = sqrt(1+(1/this%Omega_de - 1)*a**(-3))
+        F0 = sqrt(1+(1/this%Omega_de - 1))
+        num_DS = (K-Fa)*(1+Fa)**K + (K+Fa)*(Fa-1)**K
+        den_DS = (K-F0)*(1+F0)**K + (K+F0)*(F0-1)**K
+        w_de_DS= (1+this%w_0)*(a)**(3*K-3)* (num_DS / den_DS)**2 - 1._dl ! wa -> K
+
+    end if
+    
+    end function TDarkEnergyDSParam_w_de
+
+    function wde_integrand(this,a) result(integrand)
+    class(TDarkEnergyDSParam) :: this
+    real(dl) :: wde, integrand, a
+
+    wde = TDarkEnergyDSParam_w_de(this,a)
+
+    integrand = -3 * (1+wde) / a
+
+    end function wde_integrand
+
+    ! function wde_integrand_vec(this,a) result(integrand)
+    ! class(TDarkEnergyDSParam) :: this
+    ! real(dl) :: wde, integrand
+    ! real(dl), intent(in) :: a(:)
+
+    ! wde = TDarkEnergyDSParam_w_de(this,a)
+
+    ! integrand = -3 * (1+wde) / a(:)
+
+    ! end function wde_integrand_vec
+
+    ! AM - added this     ! todo - Romberg integrate to get grho_de, caereful with definition of quantity
+    function TDarkEnergyDSParam_grho_de(this, a) result(grho_de) !
+    class(TDarkEnergyDSParam) :: this
+    real(dl) :: grho_de, fac !, al, fint
+    real(dl) :: tol = 1e-6 ! for Romberg
+    real(dl), intent(IN) :: a
+
+    if (a>this%acut) then
+        ! first get grho_de,0
+        ! grho_de = 0_dl
+
+        if (a==1.) then
+            grho_de = 1_dl
+        else
+            fac = Integrate_Trapz(this,wde_integrand,1._dl,a,150) ! replace with Trapz to make faster?
+            ! fac = Integrate_Romberg(this,wde_integrand,1._dl,a,tol)
+            grho_de = exp(fac) * a**4
+
+            ! write (*,*) 'doing Romberg'
+        end if
+
+    else
+        grho_de = this%grhode_cut * a**4 ! replace with stored value at zcut 
+    end if
+
+    end function TDarkEnergyDSParam_grho_de
 
     subroutine TDarkEnergyFluid_PerturbedStressEnergy(this, dgrhoe, dgqe, &
         a, dgq, dgrho, grho, grhov_t, w, gpres_noDE, etak, adotoa, k, kf1, ay, ayprime, w_ix)
@@ -216,7 +381,6 @@
     end select
 
     end subroutine TAxionEffectiveFluid_Init
-
 
     function TAxionEffectiveFluid_w_de(this, a)
     class(TAxionEffectiveFluid) :: this

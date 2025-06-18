@@ -81,7 +81,7 @@
 
     type, extends(TQuintessence) :: TQuintessenceModel ! adding a new class for the pure exponential potential
         real(dl) :: n = 1_dl
-        real(dl) :: V0 = 1e-8 !m in reduced Planck mass units
+        real(dl) :: V0 = 1e-7 !m in reduced Planck mass units
         real(dl) :: theta_i = 0_dl !initial field value
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
         ! logical :: use_zc = .false. !adjust m to fit zc
@@ -105,9 +105,36 @@
 
     end type TQuintessenceModel
 
+    type, extends(TQuintessence) :: TQuintessenceGP ! Quintessence with Gaussian Process potential
+        real(dl) :: nodes(:), vals(:)
+        real(dl) :: V0 = 1e-7 !m in reduced Planck mass units
+        real(dl) :: theta_i = 0_dl !initial field value
+        real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
+        ! logical :: use_zc = .false. !adjust m to fit zc
+        ! real(dl) :: zc, fde_zc !redshift for peak f_de and f_de at that redshift
+        integer :: npoints = 6000 !baseline number of log a steps; will be increased if needed when there are oscillations
+        integer :: min_steps_per_osc = 10
+        integer :: model_idx = 1 ! which quintessence model (VofPhi) to use
+        real(dl), dimension(:), allocatable :: fde, ddfde
+        real(dl) :: omega_tol = 1d-5 !tolerance for OmegaDE
+        real(dl) :: atol = 1e-8_dl
+    contains
+    procedure :: Vofphi => TQuintessenceModel_VofPhi
+    procedure :: Init => TQuintessenceModel_Init
+    procedure :: ReadParams =>  TQuintessenceModel_ReadParams
+    procedure, nopass :: PythonClass => TQuintessenceModel_PythonClass
+    procedure, nopass :: SelfPointer => TQuintessenceModel_SelfPointer
+    ! procedure, private :: fdeAtaQ
+    ! procedure, private :: fde_peakQ
+    procedure, private :: check_errorQ
+    ! procedure :: calc_zc_fdeQ
+
+    end type TQuintessenceModel
+
+
     procedure(TClassDverk) :: dverk
 
-    public TQuintessence, TEarlyQuintessence,TQuintessenceModel
+    public TQuintessence, TEarlyQuintessence,TQuintessenceModel, TQuintessenceGP
     contains
 
     function VofPhi(this, phi, deriv)
@@ -800,13 +827,21 @@
         else if (deriv ==2) then
             Vofphi = this%V0*costheta/(this%n)**2
         end if
+    ! elseif (this%model_idx==3) then !FT Hilltop, n = phi0
+    !     if (deriv==0) then 
+    !         Vofphi = this%V0*(1 - (theta/this%n)**2 ) + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
+    !     else if (deriv ==1) then
+    !         Vofphi = -2*this%V0 * theta/ (this%n)**2  !units*this%m**2*this%f*this%n*(1 - cos(theta))**(this%n-1)*sin(theta)
+    !     else if (deriv ==2) then
+    !         Vofphi = -2*this%V0 / (this%n)**2
+    !     end if
     elseif (this%model_idx==3) then !FT Hilltop, n = phi0
-        if (deriv==0) then 
-            Vofphi = this%V0*(1 - (theta/this%n)**2 ) + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
+        if (deriv==0) then
+            Vofphi = this%V0*(1 - (theta/this%n)**2 )**2 + this%frac_lambda0*this%State%grhov !units*this%m**2*this%f**2*(1 - cos(theta))**this%n + this%frac_lambda0*this%State%grhov
         else if (deriv ==1) then
-            Vofphi = -2*this%V0 * theta/ (this%n)**2  !units*this%m**2*this%f*this%n*(1 - cos(theta))**(this%n-1)*sin(theta)
+            Vofphi = -4*this%V0 * theta*(1-(theta/this%n)**2)/ (this%n)**2  !units*this%m**2*this%f*this%n*(1 - cos(theta))**(this%n-1)*sin(theta)
         else if (deriv ==2) then
-            Vofphi = -2*this%V0 / (this%n)**2
+            Vofphi = this%V0*(8*theta**2/(this%n)**4 - 4*(1-(theta/this%n)**2)/(this%n)**2 )  !-2*this%V0 / (this%n)**2
         end if
     elseif (this%model_idx==2) then !Sugra Hilltop, n = alpha
         if (deriv==0) then 
@@ -839,7 +874,7 @@
     integer ind, i, ix
     real(dl), parameter :: splZero = 0._dl
     real(dl) lastsign, da_osc, last_a, a_c
-    real(dl) initial_phi, initial_phidot, a2, logV0_in, logV0, logV0_1, logV0_2,logV0_low, logV0_high, deltalogV0, V0_input, om,om1,om2,atol,astart
+    real(dl) initial_phi, initial_phidot, a2, logV0_in, logV0, logV0_1, logV0_2,logV0_low, logV0_high, deltalogV0, V0_input, om,om1,om2,atol,astart, om_in
     real(dl), dimension(:), allocatable :: sampled_a, phi_a, phidot_a, fde
     integer npoints, tot_points, max_ix
     logical has_peak, OK
@@ -885,10 +920,12 @@
     astart = this%astart
     atol = this%atol
     initial_phidot =  astart*this%phidot_start(initial_phi)
-    om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
+    ! om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
+    om_in= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
     V0_input = this%V0
     if (FeedbackLevel > 0) write (*,*) 'checking if need to adjust input V0 = ',this%V0
-    if (FeedbackLevel > 0) write(*,*) 'Omega_DE from scalar field IC = ',om1
+    ! if (FeedbackLevel > 0) write(*,*) 'Omega_DE from scalar field IC = ',om1
+    if (FeedbackLevel > 0) write(*,*) 'Omega_DE from scalar field IC = ',om_in
     if (FeedbackLevel > 0) write(*,*) 'Omega_DE tolerance = ',this%omega_tol
     if (FeedbackLevel > 0) write(*,*) 'Omega_DE required = ',this%State%Omega_de
 
@@ -924,19 +961,26 @@
 
 
     ! --------------- method 2 for initial conditions tuning V0 using Binary search ------------------------------
-    this%V0 = 1d-6
-    om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
-    logV0_low = -20.0_dl
-    logV0_high = 20_dl
+    ! this%V0 = 1d-7
+    ! om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
+    logV0_low = -15.0_dl !-20.0_dl
+    logV0_high = -1.0_dl !20_dl
     logV0 = this%V0
     if (FeedbackLevel > 1) write (*,*)  'required DE, first trial:', this%State%omega_de, om1
-    if (abs(om1-this%State%omega_de) > this%omega_tol) then
+    ! if (abs(om1-this%State%omega_de) > this%omega_tol) then
+    if (abs(om_in-this%State%omega_de) > this%omega_tol) then
        !if not, do binary search in the interval
        OK=.false.
+       if (om_in>this%State%omega_de) then ! addded if
+          logV0_high = log10(this%V0)
+       else
+          logV0_low = log10(this%V0)
+       end if
        this%V0 = 10**(logV0_low) 
        om1 = this%GetOmegaFromInitial(astart,initial_phi,initial_phidot, atol)
        this%V0 = 10**(logV0_high) 
        om2= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot, atol)
+       if (FeedbackLevel > 1) write (*,*)  'Searching for V0 in range [log10_low,log10_high] :', logV0_low, logV0_high
        if (om1 > this%State%omega_de .or. om2 < this%State%omega_de) then
            write (*,*) 'No solution for V0 in provided range [V1,V2] = ', 10**(logV0_low), 10**(logV0_high)
            write (*,*) 'om1, om2 = ', real(om1), real(om2)

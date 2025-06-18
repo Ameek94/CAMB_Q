@@ -407,6 +407,8 @@
         allocate (TDarkEnergyFluid::P%DarkEnergy)
     else if (DarkEneryModel == 'PPF') then
         allocate (TDarkEnergyPPF::P%DarkEnergy)
+    else if (DarkEneryModel == 'DS') then ! AM - added this
+        allocate (TDarkEnergyDSParam::P%DarkEnergy)
     else if (DarkEneryModel == 'AXIONEFFECTIVEFLUID') then
         allocate (TAxionEffectiveFluid::P%DarkEnergy)
     else if (DarkEneryModel == 'EARLYQUINTESSENCE') then
