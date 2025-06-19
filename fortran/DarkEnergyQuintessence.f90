@@ -118,13 +118,14 @@
     public TQuintessence, TEarlyQuintessence,TQuintessenceSpline
     contains
 
-    subroutine order_transform(x, t, N, minval, maxval)
+    subroutine order_transform(x, t, N, minval, maxval, reverse)
     implicit none
     integer, intent(in) :: N
     real(kind=8), intent(in) :: x(N)
     real(kind=8), intent(out) :: t(N)
     real(kind=8), intent(in), optional :: minval, maxval
-    real(kind=8) :: lo, hi
+    logical, intent(in), optional :: reverse
+    real(kind=8) :: lo, hi, temp(N)
     integer :: i
 
     if (FeedbackLevel > 1) then
@@ -156,6 +157,19 @@
     do i = 2, N
         t(i) = t(i) * (hi - lo) + lo
     end do
+
+    ! If reverse flag is true, reverse order from 2..N
+    if (present(reverse)) then
+        if (reverse) then
+        ! Copy reversed values into temp
+        temp(1) = t(1)
+        do i = 2, N
+            temp(i) = t(N+2-i)
+        end do
+        ! Move back into t
+        t = temp
+        end if
+    end if
 
     end subroutine order_transform
 
@@ -274,7 +288,7 @@
     class(TQuintessence) :: this
     real(dl) :: phi
 
-    TQuintessence_phidot_start = 1d-10!0_dl
+    TQuintessence_phidot_start = 0_dl !1d-10!
 
     end function TQuintessence_phidot_start
 
@@ -899,16 +913,19 @@
 
     ! order the spline nodes if ordering is requested
     if (this%do_ordering) then
-        call this%order_transform(phi_train, ordered_phi_train, this%nspline)
-        call this%order_transform(V_train, ordered_V_train, this%nspline)
+        call this%order_transform(phi_train, ordered_phi_train, this%nspline,0.0_dl, 1.0_dl, .false.)
+        call this%order_transform(V_train, ordered_V_train, this%nspline,0.0_dl, 1.0_dl, .true.)
         if (FeedbackLevel > 0) then
             write (*,'(A)') 'After ordering phi_train'
             write (*,*) ' phi_train',  ordered_phi_train
             write (*,*) ' V_train', ordered_V_train
         end if
+        call this%gp%init(ordered_phi_train(1:this%nspline),ordered_V_train(1:this%nspline),this%lengthscale)
+    else
+         call this%gp%init(phi_train(1:this%nspline),V_train(1:this%nspline),this%lengthscale)
     end if
 
-    call this%gp%init(phi_train(1:this%nspline),V_train(1:this%nspline),this%lengthscale)
+    ! call this%gp%init(ordered_phi_train(1:this%nspline),ordered_V_train(1:this%nspline),this%lengthscale)
 
     !Make interpolation table, etc,
     !At this point massive neutrinos have been initialized

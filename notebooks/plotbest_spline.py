@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import camb
 from camb import model, initialpower
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, UnivariateSpline
 font = {'size': 16}
 matplotlib.rc('font', **font)
 matplotlib.rc('text',usetex=True)
@@ -65,12 +65,14 @@ pars.Accuracy.BackgroundTimeStepBoost=2.
 # print(pars)
 
 # Spline Quintessence
-z1 = np.logspace(5,-2,500)
-z2 = np.linspace(0.01,0.)
-zs = np.concatenate((z1,z2))
+# z1 = np.logspace(5,-2,500)
+# z2 = np.linspace(0.01,0.)
+# zs = np.concatenate((z1,z2))
+zs = np.linspace(0,2.4,100)
 scales = 1/(1+zs)
+Ns = np.log(scales)
 
-fig, ax = plt.subplots(3,2,figsize=(15,9),layout='constrained')
+fig, ax = plt.subplots(3,2,figsize=(15,12),layout='constrained')
 ax[0,1].set_ylabel(r'$ D_\ell^{TT} [\mu {\rm K}^2]$')
 ax[1,1].set_ylabel(r'$\Delta D_\ell^{TT} [\mu {\rm K}^2]$')
 ax[1,1].set_xlabel(r'$\ell$')
@@ -114,6 +116,7 @@ subset['phi1'] = 0.
 # subset['phi5'] = 0.8
 # subset['phi6'] = 1.
 subset['nspline'] = nspline
+subset['ombh2'] = 0.0224
 print(subset)
 
 
@@ -133,15 +136,15 @@ omdict = dict(zip(om,omega0))
 print("Energy Densities: "+"".join(f"{key} = {value:.6f}, " for key, value in omdict.items()))
 print('Sum of energy densities = {:.6f}\n'.format(sum(omega0)))
 wde = np.array(results.get_dark_energy_rho_w(1/(1+zs))).T
-ax[1,0].semilogx(zs,wde[:,1])
-ax[0,0].semilogx(zs,results.get_Omega('de',z=zs),label='Spline')
+ax[1,0].plot(zs,wde[:,1])
+ax[0,0].plot(zs,results.get_Omega('de',z=zs),label='Spline')
 cl = results.get_lensed_scalar_cls(CMB_unit='muK')
 ls = np.arange(0,cl.shape[0])
 ax[1,1].plot(ls[2:],cl[2:,0]-cl_LCDM[2:,0],label='Spline')
 ax[0,1].plot(ls[2:],cl[2:,0],label='Spline')
 ev_phi = np.array(results.get_dark_energy_phi_phidot(1/(1+zs))).T
-ax[2,0].semilogx(zs,ev_phi[:,0],label='Spline')
-ax[2,1].semilogx(zs,ev_phi[:,1]/scales,label='Spline')
+ax[2,0].plot(zs,ev_phi[:,0],label='Spline')
+ax[2,1].plot(zs,ev_phi[:,1]/scales,label='Spline')
 
 print(f'LCDM: thetamc = {results.cosmomc_theta():.6f}')
 wde = np.array(results_LCDM.get_dark_energy_rho_w(1/(1+zs))).T
@@ -153,8 +156,20 @@ omdict = dict(zip(om,omega0))
 print("Energy Densities: "+"".join(f"{key} = {value:.6f}, " for key, value in omdict.items()))
 print('Sum of energy densities = {:.6f}\n'.format(sum(omega0)))
 ax[0,1].plot(ls[2:],cl_LCDM[2:,0],label='LCDM',color='k',ls='-.')
-ax[0,0].semilogx(zs,results_LCDM.get_Omega('de',z=zs),label=r'LCDM',color='k',ls='-.')
-ax[1,0].semilogx(zs,wde[:,1],color='k',ls='-.')
+ax[0,0].plot(zs,results_LCDM.get_Omega('de',z=zs),label=r'LCDM',color='k',ls='-.')
+ax[1,0].plot(zs,wde[:,1],color='k',ls='-.')
+wz_m = np.loadtxt('wz_median.txt',skiprows=0,delimiter=',')
+wz_ul = np.loadtxt('wz_ul.txt',skiprows=0,delimiter=',')
+wz_ll = np.loadtxt('wz_ll.txt',skiprows=0,delimiter=',')
+
+f_ll = UnivariateSpline(wz_ll[:,0],wz_ll[:,1],s=0)
+f_ul = UnivariateSpline(wz_ul[:,0],wz_ul[:,1],s=0)
+f_m = UnivariateSpline(wz_m[:,0],wz_m[:,1],s=0)
+ax[1,0].plot(zs,f_m(zs),color='k',label='DESI+Union3')
+ax[1,0].fill_between(zs,f_ll(zs),f_ul(zs),color='k',alpha=0.2)
+
+
+
 
 ax[0,0].legend()
 fig.suptitle(f'Spline Quintessence, n = {nspline}')

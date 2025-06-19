@@ -1,6 +1,6 @@
 theory:
   camb:
-    path: 'global' #/scratch/s.ameek.malhotra/CAMB_DE/CAMB_Spline/ #'global' #
+    path: 'global' # /scratch/s.ameek.malhotra/CAMB_DE/CAMB_Spline/ #'global' #
     stop_at_error: false
     extra_args:
       halofit_version: mead
@@ -35,8 +35,8 @@ params:
       max: 0.5
     ref:
       dist: norm
-      loc: 0.3
-      scale: 0.05
+      loc: 0.36
+      scale: 0.02
     latex: \ell
   phi2:
     prior:
@@ -44,8 +44,8 @@ params:
       max: 1.
     ref:
       dist: norm
-      loc: 0.8
-      scale: 0.1
+      loc: 0.34
+      scale: 0.05
     proposal: 0.05
     latex: \phi_2
   phi3:
@@ -54,8 +54,8 @@ params:
       max: 1.
     ref:
       dist: norm
-      loc: 0.6
-      scale: 0.1
+      loc: 0.15
+      scale: 0.05
     proposal: 0.05
     latex: \phi_3
   phi4:
@@ -64,8 +64,8 @@ params:
       max: 1.
     ref:
       dist: norm
-      loc: 0.4
-      scale: 0.1
+      loc: 0.2
+      scale: 0.05
     proposal: 0.05
     latex: \phi_4
   V2:
@@ -74,8 +74,8 @@ params:
       max: 1.
     ref:
       dist: norm
-      loc: 0.8
-      scale: 0.1
+      loc: 0.9
+      scale: 0.05
     proposal: 0.05
     latex: V_2
   V3:
@@ -84,8 +84,8 @@ params:
       max: 1.
     ref:
       dist: norm
-      loc: 0.6
-      scale: 0.1
+      loc: 0.85
+      scale: 0.05
     proposal: 0.05
     latex: V_3
   V4:
@@ -94,8 +94,8 @@ params:
       max: 1.
     ref:
       dist: norm
-      loc: 0.4
-      scale: 0.1
+      loc: 0.8
+      scale: 0.05
     proposal: 0.05
     latex: V_4
   omk: 0
@@ -169,15 +169,16 @@ sampler:
   #   drag: false
   #   oversample_power: 0.4
   #   proposal_scale: 1.9
-  #   covmat: auto
+  #   covmat: ./base_plikHM_TTTEEE_lowl_lowE_lensing_post_BAO.covmat
   #   Rminus1_stop: 0.1
   #   Rminus1_cl_stop: 0.2
   #   max_tries: 10000
+  #   max_samples: 20000
   # polychord:
   #   nlive: 25d
   #   precision_criterion: 0.1
   minimize:
     method: scipy
-    best_of: 8
+    best_of: 32
 output: chains/spline_4_free
 # minimize: true
