@@ -11,7 +11,7 @@
 #SBATCH --time=2-23:59
 #SBATCH --account=scw2169
 #number of parallel processes (tasks) you are requesting - maps to MPI processes
-#SBATCH --ntasks=8
+#SBATCH --ntasks=4
 #SBATCH --cpus-per-task=8
 #memory per process in MB 
 #SBATCH --mem-per-cpu=4096

@@ -51,25 +51,34 @@ cl_LCDM = results_LCDM.get_lensed_scalar_cls(CMB_unit='muK')
 ls_LCDM = np.arange(cl_LCDM.shape[0])
 
 dark_energy_model  = 'QuintessenceSpline'
-nspline = 5
+nspline = 4
 phi1 = 0.
-phi2 = 0.2
-phi3 = 0.4
-phi4 = 0.6
-phi5 = 0.8
-phi6 = 1.
+phi2 = 0.34 #0.2
+phi3 = 0.15 #0.4
+phi4 = 0.2 #0.6
 V1 = 1.
-V2 = 0.95
-V3 = 0.90
-V4 = 0.85
-V5 = 0.80
-V6 = 0.75
+V2 = 0.9 #0.95
+V3 = 0.85 #0.90
+V4 = 0.8 #0.85
+# phi1 = 0.
+# phi2 = 0.2
+# phi3 = 0.4
+# phi4 = 0.6
+# # phi5 = 0.8
+# # phi6 = 1.
+# V1 = 1.
+# V2 = 0.95
+# V3 = 0.90
+# V4 = 0.85
+# V5 = 0.80
+# V6 = 0.75
 lengthscale = 0.36
 
 camb.set_feedback_level(level=2)
 pars = camb.set_params(ombh2=ombh2, omch2=omch2, H0=hubble,
-                       V0= 1e-10, phi1=phi1, phi2=phi2, phi3=phi3, phi4=phi4, phi5=phi5, phi6=phi6,
-                       V1=V1, V2=V2, V3=V3, V4=V4, V5=V5, V6=V6,nspline=nspline,lengthscale=lengthscale,
+                       V0= 1e-10, phi1=phi1, phi2=phi2, phi3=phi3, phi4=phi4,# phi5=phi5, phi6=phi6,
+                       V1=V1, V2=V2, V3=V3, V4=V4, #V5=V5, V6=V6,
+                       nspline=nspline,lengthscale=lengthscale,
                        dark_energy_model='QuintessenceSpline',) 
 
 # pars.set_accuracy(AccuracyBoost=4.) 
@@ -110,4 +119,14 @@ ax[1,0].semilogx(zs,wde[:,1],color='k',ls='-.')
 ax[0,0].legend()
 fig.suptitle('Spline Quintessence')
 fig.tight_layout()
+plt.savefig('testspline_quintessence.pdf',bbox_inches='tight')
 plt.show()
+
+# plot the spline potential
+
+# plt.figure(figsize=(8,4))
+# phis = np.linspace(0.,0.5,50)
+# Vphi = np.array(results.get_dark_energy_Vphi(phis)) #.T
+
+# plt.plot(phis,Vphi,label='Spline')
+# plt.show()

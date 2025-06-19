@@ -173,11 +173,12 @@ sampler:
   #   Rminus1_stop: 0.1
   #   Rminus1_cl_stop: 0.2
   #   max_tries: 10000
-  # polychord:
-  #   nlive: 25d
-  #   precision_criterion: 0.1
-  minimize:
-    method: scipy
-    best_of: 8
-output: chains/spline_4_free
+  polychord:
+    nlive: 25d
+    precision_criterion: 0.1
+    maximise : true
+  # minimize:
+  #   method: scipy
+  #   best_of: 4 
+output: chains/spline_4_free_pchord
 # minimize: true

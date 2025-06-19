@@ -84,8 +84,8 @@
         integer :: nspline = 4 !number of points in spline
         ! real(dl) :: phimin = 0_dl
         ! real(dl) :: phimax = 1_dl !range of phi for spline
-        real(dl) :: phi1, phi2, phi3, phi4, phi5, phi6 !nodes for spline
-        real(dl) :: V1, V2, V3, V4, V5, V6 !potential at nodes
+        real(dl) :: phi1, phi2, phi3, phi4 !, phi5, phi6 !nodes for spline
+        real(dl) :: V1, V2, V3, V4 !, V5, V6 !potential at nodes
         real(dl) :: lengthscale = 0.5_dl !length scale for RBF kernel
         logical :: do_ordering = .true. !whether to order the nodes in phi
         real(dl) :: V0 = 1e-8 !m in reduced Planck mass units
@@ -861,7 +861,7 @@
     real(dl), parameter :: splZero = 0._dl
     real(dl) lastsign, da_osc, last_a, a_c
     real(dl) initial_phi, initial_phidot, a2, logV0_in, logV0, logV0_1, logV0_2,logV0_low, logV0_high, deltalogV0, V0_input, om,om1,om2,atol,astart
-    real(dl), dimension(:), allocatable :: sampled_a, phi_a, phidot_a, fde, phi_train, V_train, ordered_phi_train
+    real(dl), dimension(:), allocatable :: sampled_a, phi_a, phidot_a, fde, phi_train, V_train, ordered_phi_train, ordered_V_train
     integer npoints, tot_points, max_ix
     logical has_peak, OK
     real(dl) fzero, xzero
@@ -870,21 +870,21 @@
     Type(TNEWUOA) :: Minimize
     real(dl) log_params(2), param_min(2), param_max(2)
 
-    allocate(phi_train(this%nspline), V_train(this%nspline),ordered_phi_train(this%nspline))
+    allocate(phi_train(this%nspline), V_train(this%nspline),ordered_phi_train(this%nspline),ordered_V_train(this%nspline))
 
     phi_train(1) = this%phi1
     phi_train(2) = this%phi2
     phi_train(3) = this%phi3
     phi_train(4) = this%phi4
-    phi_train(5) = this%phi5
-    phi_train(6) = this%phi6
+    ! phi_train(5) = this%phi5
+    ! phi_train(6) = this%phi6
 
     V_train(1) = this%V1
     V_train(2) = this%V2
     V_train(3) = this%V3
     V_train(4) = this%V4
-    V_train(5) = this%V5
-    V_train(6) = this%V6
+    ! V_train(5) = this%V5
+    ! V_train(6) = this%V6
 
     ! reflect V around phi=0 to get a symmetric potential
 
@@ -900,14 +900,13 @@
     ! order the spline nodes if ordering is requested
     if (this%do_ordering) then
         call this%order_transform(phi_train, ordered_phi_train, this%nspline)
+        call this%order_transform(V_train, ordered_V_train, this%nspline)
         if (FeedbackLevel > 0) then
             write (*,'(A)') 'After ordering phi_train'
             write (*,*) ' phi_train',  ordered_phi_train
+            write (*,*) ' V_train', ordered_V_train
         end if
     end if
-
-
-
 
     call this%gp%init(phi_train(1:this%nspline),V_train(1:this%nspline),this%lengthscale)
 
@@ -1327,14 +1326,14 @@
     this%phi2 = Ini%Read_Double('phi2', 0.2d0)
     this%phi3 = Ini%Read_Double('phi3', 0.3d0)
     this%phi4 = Ini%Read_Double('phi4', 0.4d0)
-    this%phi5 = Ini%Read_Double('phi5', 0.5d0)
-    this%phi6 = Ini%Read_Double('phi6', 0.6d0)
+    ! this%phi5 = Ini%Read_Double('phi5', 0.5d0)
+    ! this%phi6 = Ini%Read_Double('phi6', 0.6d0)
     this%V1 = Ini%Read_Double('V1', 0.1d0)
     this%V2 = Ini%Read_Double('V2', 0.2d0)
     this%V3 = Ini%Read_Double('V3', 0.3d0)
     this%V4 = Ini%Read_Double('V4', 0.4d0)  
-    this%V5 = Ini%Read_Double('V5', 0.5d0)
-    this%V6 = Ini%Read_Double('V6', 0.6d0)
+    ! this%V5 = Ini%Read_Double('V5', 0.5d0)
+    ! this%V6 = Ini%Read_Double('V6', 0.6d0)
     this%lengthscale = Ini%Read_Double('lengthscale', 0.5_dl)
 
     end subroutine TQuintessenceSpline_ReadParams

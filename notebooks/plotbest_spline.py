@@ -96,23 +96,23 @@ cl_LCDM = results_LCDM.get_lensed_scalar_cls(CMB_unit='muK')
 ls_LCDM = np.arange(cl_LCDM.shape[0])
 
 dark_energy_model  = 'QuintessenceSpline'
-nspline = 5
-keys = ["V2", "V3", "V4", "V5", "omch2", "H0","lengthscale"]
-filepath = "cobaya_input/chains/spline_5.minimum.txt"
+nspline = 4
+keys = ["omch2", "H0","lengthscale"] + [f"V{i+1}" for i in range(1,nspline)] + \
+       [f"phi{i+1}" for i in range(1,nspline)]
+filepath = f"cobaya_input/chains/spline_{nspline}_free.minimum.txt"
 subset = load_data_with_subset(filepath, keys)
 # print(subset)
     # => {'V2': 0.90901738, 'V3': 0.80273055, 'V4': 0.77630574,
     #     'V5': 0.9018205,   'omch2': 0.12074249, 'H0': 66.674175}
 
 subset['V1'] = 1.01
-subset['V6'] = 0.
+# subset['V6'] = 0.
 subset['phi1'] = 0.
-subset['phi2'] = 0.2
-subset['phi3'] = 0.4
-subset['phi4'] = 0.6
-subset['phi5'] = 0.8
-subset['phi6'] = 1.
-nspline = 5
+# subset['phi2'] = 0.2
+# subset['phi3'] = 0.4
+# subset['phi4'] = 0.6
+# subset['phi5'] = 0.8
+# subset['phi6'] = 1.
 subset['nspline'] = nspline
 print(subset)
 
@@ -159,5 +159,5 @@ ax[1,0].semilogx(zs,wde[:,1],color='k',ls='-.')
 ax[0,0].legend()
 fig.suptitle(f'Spline Quintessence, n = {nspline}')
 # fig.tight_layout()
-plt.savefig(f'spline_quintessence_{nspline}.pdf',bbox_inches='tight')
+plt.savefig(f'spline_quintessence_{nspline}_free.pdf',bbox_inches='tight')
 plt.show()

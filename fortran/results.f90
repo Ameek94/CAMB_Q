@@ -263,6 +263,7 @@
     procedure :: get_zstar => CAMBdata_get_zstar
     procedure :: DarkEnergyStressEnergy => CAMBdata_DarkEnergyStressEnergy
     procedure :: DarkEnergyPhiPhidot => CAMBdata_DarkEnergyPhiPhidot
+    ! procedure :: DarkEnergyVphi => CAMBdata_DarkEnergyVphi
     procedure :: SetParams => CAMBdata_SetParams
     procedure :: Free => CAMBdata_Free
     procedure :: grho_no_de
@@ -1078,6 +1079,17 @@
         call this%CP%DarkEnergy%ValsAta(a(i), phi(i), phidot(i))
     end do
     end subroutine CAMBdata_DarkEnergyPhiPhidot
+
+    ! subroutine CAMBdata_DarkEnergyVphi(this, phi, Vphi, n, deriv) ! added for phiphidot output
+    ! class(CAMBdata) :: this
+    ! integer, intent(in) :: n, deriv
+    ! real(dl), intent(in) :: phi(n)
+    ! real(dl), intent(out) :: Vphi(n)
+    ! integer i
+    ! do i=1, n
+    !     Vphi(i) = this%CP%DarkEnergy%Vofphi(phi(i),deriv)
+    ! end do
+    ! end subroutine CAMBdata_DarkEnergyVphi
 
     function rofChi(this,Chi) !sinh(chi) for open, sin(chi) for closed.
     class(CAMBdata) :: this

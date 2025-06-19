@@ -4,6 +4,6 @@
 
 # cobaya-run spline_5.yaml --minimize
 
-cobaya-run spline_4_free.yaml
+mpirun -n 2 cobaya-run spline_4_free.yaml -r
 
 cobaya-run spline_4_free_minimize.yaml

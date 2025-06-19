@@ -2,15 +2,6 @@ from .baseconfig import F2003Class, fortran_class, numpy_1d, CAMBError, np, \
     AllocatableArrayDouble, f_pointer
 from ctypes import c_int, c_double, byref, POINTER, c_bool
 
-
-# def order_transform(x,min=0.,max=1.):
-#     N = len(x)
-#     t = np.zeros(N)
-#     t[N-1] = x[N-1]**(1./N)
-#     for n in range(N-2, -1, -1):
-#         t[n] = x[n]**(1./(n+1)) * t[n+1]
-#     return t*(max-min) + min
-
 class DarkEnergyModel(F2003Class):
     """
     Abstract base class for dark energy model implementations.
@@ -244,14 +235,14 @@ class QuintessenceSpline(Quintessence):
         ("phi2", c_double, "nodes for spline interpolation of VofPhi"),
         ("phi3", c_double, "nodes for spline interpolation of VofPhi"),
         ("phi4", c_double, "nodes for spline interpolation of VofPhi"),
-        ("phi5", c_double, "nodes for spline interpolation of VofPhi"),
-        ("phi6", c_double, "nodes for spline interpolation of VofPhi"),
+        # ("phi5", c_double, "nodes for spline interpolation of VofPhi"),
+        # ("phi6", c_double, "nodes for spline interpolation of VofPhi"),
         ("V1", c_double, "potential V(phi) at nodes"),
         ("V2", c_double, "potential V(phi) at nodes"),
         ("V3", c_double, "potential V(phi) at nodes"),
         ("V4", c_double, "potential V(phi) at nodes"),
-        ("V5", c_double, "potential V(phi) at nodes"),
-        ("V6", c_double, "potential V(phi) at nodes"),
+        # ("V5", c_double, "potential V(phi) at nodes"),
+        # ("V6", c_double, "potential V(phi) at nodes"),
         ("lengthscale", c_double, "length scale for spline interpolation of VofPhi"),
         # ("do_ordering", c_bool, "if True, order phi and V values before spline interpolation"),
         ("V0", c_double, "Overall potential amplitude "
@@ -273,24 +264,23 @@ class QuintessenceSpline(Quintessence):
     _fortran_class_name_ = 'TQuintessenceSpline'
 
     def set_params(self, nspline=4, 
-                   phi1=0., phi2=0., phi3=0., phi4=0., phi5=0., phi6=0., 
-                   V1=1., V2=1., V3=1., V4=1., V5=1., V6=1., lengthscale=1.,
+                   phi1=0., phi2=0., phi3=0., phi4=0., #phi5=0., phi6=0., 
+                   V1=1., V2=1., V3=1., V4=1., #V5=1., V6=1.,
+                   lengthscale=1.,
                    V0=1e-8, theta_i=0.0,frac_lambda0=0.):
         self.nspline = nspline
-        # self.phimin = phimin
-        # self.phimax = phimax
         self.phi1 = phi1
         self.phi2 = phi2
         self.phi3 = phi3
         self.phi4 = phi4
-        self.phi5 = phi5
-        self.phi6 = phi6
+        # self.phi5 = phi5
+        # self.phi6 = phi6
         self.V1 = V1
         self.V2 = V2
         self.V3 = V3
         self.V4 = V4
-        self.V5 = V5
-        self.V6 = V6
+        # self.V5 = V5
+        # self.V6 = V6
         self.lengthscale = lengthscale
         self.V0 = V0
         self.theta_i = theta_i
