@@ -94,11 +94,15 @@ F90C     = gfortran
 COMMON_FFLAGS = -MMD -cpp -ffree-line-length-none -fmax-errors=4 -fopenmp
 # Using -ffast-math causes differences between Debug and Release configurations.
 FFLAGS = -O3 $(COMMON_FFLAGS)
-DEBUGFLAGS = -g -fbacktrace -ffpe-trap=invalid,overflow,zero -fbounds-check $(COMMON_FFLAGS)
+DEBUGFLAGS = -g -fbacktrace -fcheck=all -fbounds-check \
+             -ffpe-trap=invalid,zero,overflow \
+             $(COMMON_FFLAGS)
+# DEBUGFLAGS = -g -fbacktrace -fcheck=all -ftrapuv=0 -ftrap=all $(COMMON_FFLAGS)
+# DEBUGFLAGS = -g -fbacktrace -ffpe-trap=invalid,overflow,zero -fbounds-check $(COMMON_FFLAGS)
 ifeq ($(shell uname -s),Darwin)
 SFFLAGS = -dynamiclib #-fpic
 ifneq ($(shell echo $(compiler_ver) | awk '{print ($$1 >= 14.0)}'),0)
-SFFLAGS += -static-libgfortran -static-libgcc -static-libquadmath 
+SFFLAGS += -static-libgfortran -static-libgcc -static-libquadmath
 endif
 else
 SFFLAGS = -shared -fpic

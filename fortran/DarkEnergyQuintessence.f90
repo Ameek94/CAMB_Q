@@ -18,6 +18,7 @@
     !initial conditions to find what is required to give that Omega_Q today after evolution.
 
     module Quintessence
+    use MpiUtils, only : MpiStop
     use DarkEnergyInterface
     use results
     use constants
@@ -87,7 +88,8 @@
         real(dl) :: phi1, phi2, phi3, phi4 !, phi5, phi6 !nodes for spline
         real(dl) :: V1, V2, V3, V4 !, V5, V6 !potential at nodes
         real(dl) :: lengthscale = 0.5_dl !length scale for RBF kernel
-        logical :: do_ordering = .true. !whether to order the nodes in phi
+        logical :: do_ordering_phi = .true. !whether to order the nodes in phi in ascending order
+        logical :: do_ordering_V = .true. !whether to order the V values in descending order
         real(dl) :: V0 = 1e-8 !m in reduced Planck mass units
         real(dl) :: theta_i = 0_dl !initial field value
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
@@ -153,7 +155,7 @@
     end do
 
     ! Scale to [lo, hi]
-    t(1) = x(1) 
+    t(1) = x(1)
     do i = 2, N
         t(i) = t(i) * (hi - lo) + lo
     end do
@@ -277,6 +279,20 @@
     grhode=a2*(0.5d0*phidot**2 + a2*this%Vofphi(phi,0))
     tot = this%state%grho_no_de(a) + grhode
 
+    ! write (*,*) 'EvolveBackground: a, phi, phidot, grhode, tot = ', a, phi, phidot, grhode, tot
+
+    if (grhode < 0.0_dl) then
+        global_error_flag = error_darkenergy
+        global_error_message= 'TQuintessence EvolveBackground: negative grhode'
+        ! if (FeedbackLevel > 0) then
+        !     write(*,*) 'TQuintessence EvolveBackground: negative grhode'
+        !     write(*,*) 'a, phi, phidot, grhode, tot = ', a, phi, phidot, grhode, tot
+        ! end if
+        ! stop 'TQuintessence EvolveBackground: negative grhode'
+        ! error stop 'TQuintessence EvolveBackground: negative grhode'
+        return
+    end if
+
     adot=sqrt(tot/3.0d0)
     yprime(1)=phidot/adot !d phi /d a
     yprime(2)= -a2**2*this%Vofphi(phi,1)/adot
@@ -288,7 +304,7 @@
     class(TQuintessence) :: this
     real(dl) :: phi
 
-    TQuintessence_phidot_start = 0_dl !1d-10!
+    TQuintessence_phidot_start = 1d-10 ! 0.0_dl !
 
     end function TQuintessence_phidot_start
 
@@ -849,14 +865,46 @@
     real(dl) :: phi
     integer :: deriv
     real(dl) :: Vout
+    real(dl) :: logV, dlogV, ddlogV
+
+    !! GP for Log-dV/dphi
+
+
+    ! GP for Log-Potential
+    ! Evaluate log-potential GP and its derivatives:
+    logV  = this%gp%V(phi)      ! = ln V(phi)
+    dlogV  = this%gp%Vd(phi)     ! = d/dphi [ln V(phi)]
+    ddlogV = this%gp%Vdd(phi)    ! = d2/dphi2 [ln V(phi)]
+
+    if (phi<0._dl) then
+        ! Reflect potential around phi=0
+        logV  = this%gp%V(-phi)      ! = ln V(phi)
+        dlogV  = this%gp%Vd(-phi)     ! = d/dphi [ln V(phi)]
+        ddlogV = this%gp%Vdd(-phi)
+    end if
 
     select case(deriv)
       case (0)
-        Vout = this%V0 * this%gp%V(phi)         ! calls SplinePotential%V
+        Vout = this%V0 * exp(logV) !this%gp%V(phi)         ! calls SplinePotential%V
+        ! if (Vout<0._dl) then
+        !     ! write(*,*) 'TQuintessenceSpline_VofPhi: VofPhi negative at phi = ', phi, ' Vout = ', Vout
+        !     global_error_flag = error_darkenergy
+        !     global_error_message= 'TQuintessenceSpline_VofPhi: VofPhi negative'
+        !     ! error stop 'VofPhi negative'
+        !     Vout = 0.0_dl
+        !     return
+        ! end if
       case (1)
-        Vout = this%V0 *  this%gp%Vd(phi)        ! calls SplinePotential%Vd
+        Vout = this%V0 * exp(logV) * dlogV   !this%gp%Vd(phi)        ! calls SplinePotential%Vd
+        ! if Vout > 0._dl then
+        !     ! write(*,*) 'TQuintessenceSpline_VofPhi: VofPhi negative at phi = ', phi, ' Vout = ', Vout
+        !     global_error_flag = error_darkenergy
+        !     global_error_message= 'TQuintessenceSpline_VofPhi: dVofPhi positive'
+        !     ! error stop 'VofPhi negative'
+        !     return
+        ! end if
       case (2)
-        Vout = this%V0 *  this%gp%Vdd(phi)       ! calls SplinePotential%Vdd
+        Vout = this%V0 * exp(logV) *(dlogV + ddlogV**2)  !this%gp%Vdd(phi)       ! calls SplinePotential%Vdd
       case default
         stop 'Invalid deriv in spline VofPhi'
       end select
@@ -865,7 +913,7 @@
 
     subroutine TQuintessenceSpline_Init(this, State)
     use Powell
-    use GaussianPotential
+    ! use GaussianPotential
     class(TQuintessenceSpline), intent(inout) :: this
     class(TCAMBdata), intent(in), target :: State
     real(dl) aend, afrom
@@ -883,6 +931,8 @@
     Type(TTimer) :: Timer
     Type(TNEWUOA) :: Minimize
     real(dl) log_params(2), param_min(2), param_max(2)
+    real(dl), allocatable :: test_V_values(:), test_phi_values(:)
+    ! real(dl), allocatable :: phi_train_use(:), V_train_use(:)
 
     allocate(phi_train(this%nspline), V_train(this%nspline),ordered_phi_train(this%nspline),ordered_V_train(this%nspline))
 
@@ -903,7 +953,7 @@
     ! reflect V around phi=0 to get a symmetric potential
 
     ! print phi_train, V_train
-    if (FeedbackLevel > 0) then
+    if (FeedbackLevel > 1) then
         write (*,'(A)') 'Initializing spline potential with phi_train, V_train, lengthscale'
         write (*,*) ' Nspline = ', this%nspline
         write (*,*) ' phi_train',  phi_train
@@ -912,20 +962,87 @@
     end if
 
     ! order the spline nodes if ordering is requested
-    if (this%do_ordering) then
-        call this%order_transform(phi_train, ordered_phi_train, this%nspline,0.0_dl, 1.0_dl, .false.)
-        call this%order_transform(V_train, ordered_V_train, this%nspline,0.0_dl, 1.0_dl, .true.)
-        if (FeedbackLevel > 0) then
+    if (this%do_ordering_phi) then
+        call this%order_transform(phi_train, ordered_phi_train, this%nspline,0.0_dl, 0.5_dl, .false.)
+        phi_train = ordered_phi_train
+        if (FeedbackLevel > 1) then
             write (*,'(A)') 'After ordering phi_train'
             write (*,*) ' phi_train',  ordered_phi_train
-            write (*,*) ' V_train', ordered_V_train
         end if
-        call this%gp%init(ordered_phi_train(1:this%nspline),ordered_V_train(1:this%nspline),this%lengthscale)
-    else
-         call this%gp%init(phi_train(1:this%nspline),V_train(1:this%nspline),this%lengthscale)
+    end if
+    if (this%do_ordering_V) then
+        call this%order_transform(V_train, ordered_V_train, this%nspline,-2.0_dl, 0.0_dl, .true.)
+        ! do iter=1,this%nspline
+        V_train = ordered_V_train !10.0_dl**(ordered_V_train) ! !
+        ! end do
+        ! V_train = 10.0_dl**(ordered_V_train)
+        V_train(1) = this%V1
+        if (FeedbackLevel > 1) then
+            write (*,'(A)') 'After ordering V_train'
+            write (*,*) ' V_train', V_train
+        end if
     end if
 
-    ! call this%gp%init(ordered_phi_train(1:this%nspline),ordered_V_train(1:this%nspline),this%lengthscale)
+    call this%gp%init(phi_train(1:this%nspline),V_train(1:this%nspline),this%lengthscale)
+
+    allocate(test_V_values(100), test_phi_values(100))
+
+    do iter=1,100
+        test_phi_values(iter) = phi_train(1) + (iter-1) *(phi_train(1) - phi_train(this%nspline)) / (99.0_dl)   ! test phi at training points
+        test_V_values(iter) = this%VofPhi(test_phi_values(iter),0) / this%V0 ! test VofPhi at training points
+    end do
+
+    do iter=2,100
+        if (test_V_values(iter) > test_V_values(iter-1)) then
+            ! write(*,*) 'TQuintessenceSpline_VofPhi: VofPhi not monotonic at phi = ', test_phi_values(iter), ' Vout = ', test_V_values(iter)
+            global_error_flag = error_darkenergy
+            global_error_message= 'TQuintessenceSpline_VofPhi: VofPhi not monotonic'
+            call GlobalError(global_error_message, global_error_flag)
+            call MpiStop(global_error_message)
+            ! return
+        end if
+        ! test_V_values(iter) = this%VofPhi(0.5_dl * ((iter-1)/99.0_dl), 1)
+        ! if (test_V_values(iter) > 0._dl) then
+        !     ! write(*,*) 'TQuintessenceSpline_VofPhi: VofPhi negative at phi = ', 0.5_dl * ((iter-1)/50.0_dl), ' Vout = ', test_V_values(iter)
+        !     global_error_flag = error_darkenergy
+        !     global_error_message= 'TQuintessenceSpline_VofPhi: dVofPhi positive'
+        !     return
+        !     ! error stop 'VofPhi negative'
+        !     ! test_V_values(iter) = 0.0_dl
+        ! end if
+    end do
+
+    ! if (FeedbackLevel > 1) then
+    !     write (*,'(A)') 'Testing spline potential VofPhi at phi_train'
+    !     write (*,*) ' test_V_values', test_V_values
+    ! end if
+
+    ! allocate(phi_train_use(2 * this%nspline - 1), V_train_use(2 * this%nspline - 1))
+
+    ! phi_train_use(this%nspline) = phi_train(1)
+    ! V_train_use(this%nspline) = V_train(1)
+
+    ! do iter=1,this%nspline-1
+    !     phi_train_use(this%nspline - iter) = -phi_train(iter+1)
+    !     phi_train_use(this%nspline + iter) = phi_train(iter+1)
+    !     V_train_use(this%nspline - iter) = V_train(iter+1)
+    !     V_train_use(this%nspline + iter) = V_train(iter+1)
+    ! end do
+
+
+    ! if (FeedbackLevel > 0) then
+    !     write (*,'(A)') 'Symmetric phi_train, V_train for spline potential'
+    !     write (*,*) ' ordered_phi_train_use',  phi_train_use
+    !     write (*,*) ' ordered_V_train_use', V_train_use
+    ! end if
+
+    ! call this%gp%init(phi_train_use, V_train_use, this%lengthscale)
+
+    !     call this%gp%init(ordered_phi_train(1:this%nspline),ordered_V_train(1:this%nspline),this%lengthscale)
+    ! else
+    !      call this%gp%init(phi_train(1:this%nspline),V_train(1:this%nspline),this%lengthscale)
+    ! end if
+
 
     !Make interpolation table, etc,
     !At this point massive neutrinos have been initialized
@@ -945,7 +1062,7 @@
     end if
     allocate(phi_a(npoints),phidot_a(npoints), sampled_a(npoints), fde(npoints))
 
-    if (FeedbackLevel > 0) write (*,'(A, 2ES10.2)') 'Initial values received for V0 = ', this%V0 ! just for testing 
+    if (FeedbackLevel > 0) write (*,'(A, 2ES10.2)') 'Initial values received for V0 = ', this%V0 ! just for testing
 
     initial_phi = this%theta_i
     astart = this%astart
@@ -978,7 +1095,7 @@
     !     if (FeedbackLevel > 0) write(*,*) 'Search for new V0 converged = ',OK
     !     if (FeedbackLevel > 1) write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
     !     if (FeedbackLevel > 1) write (*,'(A, ES10.2)') 'new V0 from old method = ',this%V0
-    !     if (FeedbackLevel > 1) write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1 
+    !     if (FeedbackLevel > 1) write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1
     !     ! amk - DO WE NEED TO CHANGE this%State%Omega_de to the new value
     ! else
     !     OK = .true.
@@ -991,25 +1108,27 @@
 
     ! --------------- method 2 for initial conditions tuning V0 using Binary search ------------------------------
     ! this%V0 = 1d-6
-    om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
-    logV0_low = -50.0_dl
-    logV0_high = 50_dl
+    ! om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
+    logV0_low = -20.0_dl
+    logV0_high = 20_dl
     logV0 = this%V0
     if (FeedbackLevel > 1) write (*,*)  'required DE, first trial:', this%State%omega_de, om1
     if (abs(om1-this%State%omega_de) > this%omega_tol) then
        !if not, do binary search in the interval
        OK=.false.
-       this%V0 = 10**(logV0_low) 
+       this%V0 = 10**(logV0_low)
        om1 = this%GetOmegaFromInitial(astart,initial_phi,initial_phidot, atol)
-       this%V0 = 10**(logV0_high) 
+       this%V0 = 10**(logV0_high)
        om2= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot, atol)
        if (om1 > this%State%omega_de .or. om2 < this%State%omega_de) then
-           write (*,*) 'No solution for V0 in provided range [V1,V2] = ', 10**(logV0_low), 10**(logV0_high)
-           write (*,*) 'om1, om2 = ', real(om1), real(om2)
+            if (FeedbackLevel > 0) then
+                write (*,*) 'No solution for V0 in provided range [V1,V2] = ', 10**(logV0_low), 10**(logV0_high)
+                write (*,*) 'om1, om2 = ', real(om1), real(om2)
+            end if
            !stop
            global_error_flag = error_darkenergy
            global_error_message= 'TEarlyQuintessence ERROR finding solution for V0' ! Here we need to raise a CAMBerror so that cobaya assigns point -inf loglikelihood
-           return            
+           return
        end if
        logV0_2 = logV0_high
        logV0_1 = logV0_low
@@ -1040,8 +1159,8 @@
         if (FeedbackLevel > 1) write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
         if (FeedbackLevel > 1) write (*,'(A, ES10.2)') 'new V0 from binary search = ',this%V0
         if (FeedbackLevel > 1) write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1
-        
-        if (.not. OK) then !stop 'Search for good intial conditions did not converge' !this shouldn't happen 
+
+        if (.not. OK) then !stop 'Search for good intial conditions did not converge' !this shouldn't happen
             global_error_flag = error_darkenergy
             global_error_message= 'TEarlyQuintessence ERROR finding solution for V0, ' ! Here we need to raise a CAMBerror so that cobaya assigns point -inf loglikelihood
             return
@@ -1164,8 +1283,13 @@
     real(dl) afrom, aend
 
     if (global_error_flag/=0) then
-        write(*,*) 'TQuintessenceSpline error integrating', afrom, aend
-        write(*,*) this%V0, this%theta_i
+        if (FeedbackLevel > 0) then
+            write(*,*) 'TQuintessenceSpline error in integration'
+            write(*,*) 'afrom, aend = ', afrom, aend
+            write(*,*) 'V0, theta_i = ', this%V0, this%theta_i
+        end if
+        ! write(*,*) 'TQuintessenceSpline error integrating', afrom, aend
+        ! write(*,*) this%V0, this%theta_i
         stop
         check_errorQ = .false.
         return
@@ -1335,9 +1459,11 @@
 
     call this%TDarkEnergyModel%ReadParams(Ini)
     this%nspline = Ini%Read_Int('nspline', 4)
+    this%do_ordering_phi = Ini%Read_Logical('do_ordering_phi', .true.)
+    this%do_ordering_V = Ini%Read_Logical('do_ordering_V', .true.)
     ! this%phimin = Ini%Read_Double('phimin', 0.d0)
     ! this%phimax = Ini%Read_Double('phimax', 1.d0)
-    this%V0 = Ini%Read_Double('V0', 1d-10)
+    this%V0 = Ini%Read_Double('V0', 1d-8)
     this%theta_i = Ini%Read_Double('theta_i',0.d0)
     this%phi1 = Ini%Read_Double('phi1', 0.1d0)
     this%phi2 = Ini%Read_Double('phi2', 0.2d0)
@@ -1348,7 +1474,7 @@
     this%V1 = Ini%Read_Double('V1', 0.1d0)
     this%V2 = Ini%Read_Double('V2', 0.2d0)
     this%V3 = Ini%Read_Double('V3', 0.3d0)
-    this%V4 = Ini%Read_Double('V4', 0.4d0)  
+    this%V4 = Ini%Read_Double('V4', 0.4d0)
     ! this%V5 = Ini%Read_Double('V5', 0.5d0)
     ! this%V6 = Ini%Read_Double('V6', 0.6d0)
     this%lengthscale = Ini%Read_Double('lengthscale', 0.5_dl)
@@ -1386,15 +1512,15 @@
     integer, parameter ::  NumEqs=2
     real(dl) c(24),w(NumEqs,9), y(NumEqs), ast
     integer ind, i
-    
+
     ast=astart
     ind=1
     y(1)=phi
     y(2)=phidot*astart**2
     call dverk(this,NumEqs,EvolveBackground,ast,y,1._dl,atol,ind,c,NumEqs,w)
     call EvolveBackground(this,NumEqs,1._dl,y,w(:,1))
-    
+
     GetOmegaFromInitial=(0.5d0*y(2)**2 + this%Vofphi(y(1),0))/this%State%grhocrit !(3*adot**2)
-    
+
     end function GetOmegaFromInitial
     end module Quintessence
