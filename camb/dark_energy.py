@@ -290,6 +290,9 @@ class QuintessenceSpline(Quintessence):
         self.theta_i = theta_i
         self.frac_lambda0 = frac_lambda0
 
+        print("Phi params:", self.phi1, self.phi2, self.phi3, self.phi4)
+        print("V params:", self.V1, self.V2, self.V3, self.V4)
+
     def order_transform(self,params,low=0.,high=1.,reverse=False):
         params = np.asarray(params, dtype=np.float64)
         N = len(params)

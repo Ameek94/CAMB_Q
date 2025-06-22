@@ -95,7 +95,7 @@
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
         ! logical :: use_zc = .false. !adjust m to fit zc
         ! real(dl) :: zc, fde_zc !redshift for peak f_de and f_de at that redshift
-        integer :: npoints = 5000 !baseline number of log a steps; will be increased if needed when there are oscillations
+        integer :: npoints = 2500 !baseline number of log a steps; will be increased if needed when there are oscillations
         integer :: min_steps_per_osc = 10
         real(dl), dimension(:), allocatable :: fde, ddfde
         real(dl) :: omega_tol = 1d-5 !tolerance for OmegaDE
@@ -284,13 +284,14 @@
     if (grhode < 0.0_dl) then
         global_error_flag = error_darkenergy
         global_error_message= 'TQuintessence EvolveBackground: negative grhode'
+        grhode = 0.0_dl
         ! if (FeedbackLevel > 0) then
         !     write(*,*) 'TQuintessence EvolveBackground: negative grhode'
         !     write(*,*) 'a, phi, phidot, grhode, tot = ', a, phi, phidot, grhode, tot
         ! end if
         ! stop 'TQuintessence EvolveBackground: negative grhode'
         ! error stop 'TQuintessence EvolveBackground: negative grhode'
-        return
+        ! return
     end if
 
     adot=sqrt(tot/3.0d0)
@@ -1145,25 +1146,25 @@
         call EvolveBackgroundLog(this,NumEqs,aend,y,w(:,1))
         phi_a(ix)=y(1)
         phidot_a(ix)=y(2)/a2
-        if (i==1) then
-            lastsign = y(2)
-        elseif (y(2)*lastsign < 0) then
-            !derivative has changed sign. Use to probe any oscillation scale:
-            da_osc = min(da_osc, exp(aend) - last_a)
-            last_a = exp(aend)
-            lastsign= y(2)
-        end if
+        ! if (i==1) then
+        !     lastsign = y(2)
+        ! elseif (y(2)*lastsign < 0) then
+        !     !derivative has changed sign. Use to probe any oscillation scale:
+        !     da_osc = min(da_osc, exp(aend) - last_a)
+        !     last_a = exp(aend)
+        !     lastsign= y(2)
+        ! end if
 
-        !Define fde as ratio of early dark energy density to total
-        fde(ix) = 1/((this%state%grho_no_de(sampled_a(ix)) +  this%frac_lambda0*this%State%grhov*a2**2) &
-            /(a2*(0.5d0* phidot_a(ix)**2 + a2*this%Vofphi(y(1),0))) + 1)
-        if (max_ix==0 .and. ix > 2 .and. fde(ix)< fde(ix-1)) then
-            max_ix = ix-1
-        end if
-        if (sampled_a(ix)*(exp(this%dloga)-1)*this%min_steps_per_osc > da_osc) then
-            !Step size getting too big to sample oscillations well
-            exit
-        end if
+        ! !Define fde as ratio of early dark energy density to total
+        ! fde(ix) = 1/((this%state%grho_no_de(sampled_a(ix)) +  this%frac_lambda0*this%State%grhov*a2**2) &
+        !     /(a2*(0.5d0* phidot_a(ix)**2 + a2*this%Vofphi(y(1),0))) + 1)
+        ! if (max_ix==0 .and. ix > 2 .and. fde(ix)< fde(ix-1)) then
+        !     max_ix = ix-1
+        ! end if
+        ! if (sampled_a(ix)*(exp(this%dloga)-1)*this%min_steps_per_osc > da_osc) then
+        !     !Step size getting too big to sample oscillations well
+        !     exit
+        ! end if
     end do
 
     ! Do remaining steps with linear spacing in a, trying to be small enough
@@ -1242,7 +1243,7 @@
         end if
         ! write(*,*) 'TQuintessenceSpline error integrating', afrom, aend
         ! write(*,*) this%V0, this%theta_i
-        stop
+        ! stop
         check_errorQ = .false.
         return
     end if
