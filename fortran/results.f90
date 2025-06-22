@@ -1091,16 +1091,16 @@
     end do
     end subroutine CAMBdata_DarkEnergyPhiPhidot
 
-    ! subroutine CAMBdata_DarkEnergyVphi(this, phi, Vphi, n, deriv) ! added for phiphidot output
-    ! class(CAMBdata) :: this
-    ! integer, intent(in) :: n, deriv
-    ! real(dl), intent(in) :: phi(n)
-    ! real(dl), intent(out) :: Vphi(n)
-    ! integer i
-    ! do i=1, n
-    !     Vphi(i) = this%CP%DarkEnergy%Vofphi(phi(i),deriv)
-    ! end do
-    ! end subroutine CAMBdata_DarkEnergyVphi
+    subroutine CAMBdata_DarkEnergyVphi(this, phi, Vphi, n, deriv) ! added for Vphi output
+    class(CAMBdata) :: this
+    integer, intent(in) :: n, deriv
+    real(dl), intent(in) :: phi(n)
+    real(dl), intent(out) :: Vphi(n)
+    integer i
+    do i=1, n
+        Vphi(i) = this%CP%DarkEnergy%Vofphi(phi(i),deriv)
+    end do
+    end subroutine CAMBdata_DarkEnergyVphi
 
     function rofChi(this,Chi) !sinh(chi) for open, sin(chi) for closed.
     class(CAMBdata) :: this

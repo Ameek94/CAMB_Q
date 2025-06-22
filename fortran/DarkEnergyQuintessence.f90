@@ -95,11 +95,11 @@
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
         ! logical :: use_zc = .false. !adjust m to fit zc
         ! real(dl) :: zc, fde_zc !redshift for peak f_de and f_de at that redshift
-        integer :: npoints = 6000 !baseline number of log a steps; will be increased if needed when there are oscillations
+        integer :: npoints = 5000 !baseline number of log a steps; will be increased if needed when there are oscillations
         integer :: min_steps_per_osc = 10
         real(dl), dimension(:), allocatable :: fde, ddfde
         real(dl) :: omega_tol = 1d-5 !tolerance for OmegaDE
-        real(dl) :: atol = 1e-8_dl
+        real(dl) :: atol = 1e-6_dl
         type(GPotentialRBF_type) :: gp
     contains
     procedure :: Vofphi => TQuintessenceSpline_VofPhi
@@ -885,24 +885,9 @@
 
     select case(deriv)
       case (0)
-        Vout = this%V0 * exp(logV) !this%gp%V(phi)         ! calls SplinePotential%V
-        ! if (Vout<0._dl) then
-        !     ! write(*,*) 'TQuintessenceSpline_VofPhi: VofPhi negative at phi = ', phi, ' Vout = ', Vout
-        !     global_error_flag = error_darkenergy
-        !     global_error_message= 'TQuintessenceSpline_VofPhi: VofPhi negative'
-        !     ! error stop 'VofPhi negative'
-        !     Vout = 0.0_dl
-        !     return
-        ! end if
+        Vout = this%V0 * exp(logV) !
       case (1)
-        Vout = this%V0 * exp(logV) * dlogV   !this%gp%Vd(phi)        ! calls SplinePotential%Vd
-        ! if Vout > 0._dl then
-        !     ! write(*,*) 'TQuintessenceSpline_VofPhi: VofPhi negative at phi = ', phi, ' Vout = ', Vout
-        !     global_error_flag = error_darkenergy
-        !     global_error_message= 'TQuintessenceSpline_VofPhi: dVofPhi positive'
-        !     ! error stop 'VofPhi negative'
-        !     return
-        ! end if
+        Vout = this%V0 * exp(logV) * dlogV
       case (2)
         Vout = this%V0 * exp(logV) *(dlogV + ddlogV**2)  !this%gp%Vdd(phi)       ! calls SplinePotential%Vdd
       case default
@@ -931,7 +916,6 @@
     Type(TTimer) :: Timer
     Type(TNEWUOA) :: Minimize
     real(dl) log_params(2), param_min(2), param_max(2)
-    real(dl), allocatable :: test_V_values(:), test_phi_values(:)
     ! real(dl), allocatable :: phi_train_use(:), V_train_use(:)
 
     allocate(phi_train(this%nspline), V_train(this%nspline),ordered_phi_train(this%nspline),ordered_V_train(this%nspline))
@@ -940,17 +924,11 @@
     phi_train(2) = this%phi2
     phi_train(3) = this%phi3
     phi_train(4) = this%phi4
-    ! phi_train(5) = this%phi5
-    ! phi_train(6) = this%phi6
 
     V_train(1) = this%V1
     V_train(2) = this%V2
     V_train(3) = this%V3
     V_train(4) = this%V4
-    ! V_train(5) = this%V5
-    ! V_train(6) = this%V6
-
-    ! reflect V around phi=0 to get a symmetric potential
 
     ! print phi_train, V_train
     if (FeedbackLevel > 1) then
@@ -985,32 +963,6 @@
 
     call this%gp%init(phi_train(1:this%nspline),V_train(1:this%nspline),this%lengthscale)
 
-    allocate(test_V_values(100), test_phi_values(100))
-
-    do iter=1,100
-        test_phi_values(iter) = phi_train(1) + (iter-1) *(phi_train(1) - phi_train(this%nspline)) / (99.0_dl)   ! test phi at training points
-        test_V_values(iter) = this%VofPhi(test_phi_values(iter),0) / this%V0 ! test VofPhi at training points
-    end do
-
-    do iter=2,100
-        if (test_V_values(iter) > test_V_values(iter-1)) then
-            ! write(*,*) 'TQuintessenceSpline_VofPhi: VofPhi not monotonic at phi = ', test_phi_values(iter), ' Vout = ', test_V_values(iter)
-            global_error_flag = error_darkenergy
-            global_error_message= 'TQuintessenceSpline_VofPhi: VofPhi not monotonic'
-            call GlobalError(global_error_message, global_error_flag)
-            call MpiStop(global_error_message)
-            ! return
-        end if
-        ! test_V_values(iter) = this%VofPhi(0.5_dl * ((iter-1)/99.0_dl), 1)
-        ! if (test_V_values(iter) > 0._dl) then
-        !     ! write(*,*) 'TQuintessenceSpline_VofPhi: VofPhi negative at phi = ', 0.5_dl * ((iter-1)/50.0_dl), ' Vout = ', test_V_values(iter)
-        !     global_error_flag = error_darkenergy
-        !     global_error_message= 'TQuintessenceSpline_VofPhi: dVofPhi positive'
-        !     return
-        !     ! error stop 'VofPhi negative'
-        !     ! test_V_values(iter) = 0.0_dl
-        ! end if
-    end do
 
     ! if (FeedbackLevel > 1) then
     !     write (*,'(A)') 'Testing spline potential VofPhi at phi_train'

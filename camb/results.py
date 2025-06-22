@@ -250,6 +250,7 @@ class CAMBdata(F2003Class):
         ("CosmomcTheta", [], c_double),
         ("DarkEnergyStressEnergy", [numpy_1d, numpy_1d, numpy_1d, int_arg]),
         ('DarkEnergyPhiPhidot', [numpy_1d, numpy_1d, numpy_1d, int_arg]), # added for phiphidot output
+        ('DarkEnergyVphi', [numpy_1d, numpy_1d, int_arg, int_arg]), # added for Vphi output
         ("get_lmax_lensed", [], c_int),
         ("get_zstar", [d_arg], c_double),
         ("SetParams", [POINTER(CAMBparams), int_arg, int_arg, int_arg, int_arg]),
@@ -742,7 +743,7 @@ class CAMBdata(F2003Class):
             return rho[0], w[0]
         else:
             return rho, w
-        
+
     def get_dark_energy_phi_phidot(self, a): # added for phiphidot output
         r"""
         For Quintessence models, get scalar field phi,phidot
@@ -760,6 +761,25 @@ class CAMBdata(F2003Class):
             return phi[0], phidot[0]
         else:
             return phi, phidot
+
+    def get_dark_energy_Vphi(self, phi, deriv=0):
+        r"""
+        For Quintessence models, get potential V(phi) and its derivative dV/dphi
+
+        :param phi: scalar field value or array of values
+        :param deriv: if 0, return V(phi), if 1, return dV/dphi
+        :return: V(phi) or dV/dphi at phi (or array of values if phi is an array)
+        """
+        if np.isscalar(phi):
+            phis = np.array([phi])
+        else:
+            phis = np.ascontiguousarray(phi)
+        V = np.zeros(phis.shape)
+        self.f_DarkEnergyVphi(phis, V, byref(c_int(len(phis))), byref(c_int(deriv)))
+        if np.isscalar(phi):
+            return V[0]
+        else:
+            return V
 
     @overload
     def get_Omega(self, var, z: float = 0) -> float: ...

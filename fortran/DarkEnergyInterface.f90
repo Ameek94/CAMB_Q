@@ -22,7 +22,7 @@
     procedure :: grho_de => TDarkEnergyModel_grho_de
     procedure :: Effective_w_wa !Used as approximate values for non-linear corrections
     procedure :: ValsAta !get phi and phi' at scale factor a, e.g. by interpolation in precomputed table, only wors for Quintessence models which must override this in subclass ! added for phiphidot output
-    ! procedure :: Vofphi !get V(phi), only for Quintessence models which must override this in subclass
+    procedure :: Vofphi
     end type TDarkEnergyModel
 
     type, extends(TDarkEnergyModel) :: TDarkEnergyEqnOfState
@@ -77,28 +77,17 @@
     aphidot = 0
     end subroutine ValsAta
 
-    ! function VofPhi(this, phi, deriv)
-    ! !Get the quintessence potential as function of phi
-    ! !The input variable phi is sqrt(8*Pi*G)*psi, where psi is the field
-    ! !Returns (8*Pi*G)^(1-deriv/2)*d^{deriv}V(psi)/d^{deriv}psi evaluated at psi
-    ! !return result is in 1/Mpc^2 units [so times (Mpc/c)^2 to get units in 1/Mpc^2]
-    ! class(TDarkEnergyModel) :: this
-    ! real(dl) phi,Vofphi
-    ! integer deriv
-
-    ! call MpiStop('Quintessence classes must override to provide VofPhi')
-    ! VofPhi = 0
-    ! !if (deriv==0) then
-    ! !    Vofphi= norm*this%m*exp(-this%sigma_model*phi)
-    ! !else if (deriv ==1) then
-    ! !    Vofphi=-norm*this%m*sigma_model*exp(-this%sigma_model*phi)
-    ! !else if (deriv ==2) then
-    ! !    Vofphi=norm*this%m*sigma_model**2*exp(-this%sigma_model*phi)
-    ! !else
-    ! !    stop 'Invalid deriv in Vofphi'
-    ! !end if
-    ! !VofPhi = VOfPhi* MPC_in_sec**2 /Tpl**2  !convert to units of 1/Mpc^2
-    ! end function VofPhi
+    function Vofphi(this, phi, deriv)
+    !Get the quintessence potential as function of phi
+    !The input variable phi is sqrt(8*Pi*G)*psi, where psi is the field
+    !Returns (8*Pi*G)^(1-deriv/2)*d^{deriv}V(psi)/d^{deriv}psi evaluated at psi
+    !return result is in 1/Mpc^2 units [so times (Mpc/c)^2 to get units in 1/Mpc^2]
+    class(TDarkEnergyModel) :: this
+    real(dl) phi,Vofphi
+    integer deriv
+    VofPhi = 0
+    call MpiStop('Quintessence classes must override to provide VofPhi')
+    end function Vofphi
 
     subroutine PrintFeedback(this, FeedbackLevel)
     class(TDarkEnergyModel) :: this
