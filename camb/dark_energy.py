@@ -272,49 +272,33 @@ class QuintessenceSpline(Quintessence):
     ] # type: ignore
     _fortran_class_name_ = 'TQuintessenceSpline'
 
-    def set_params(self, nspline=4, 
-                   phi1=0., phi2=0., phi3=0., phi4=0., #phi5=0., phi6=0., 
-                   V1=1., V2=1., V3=1., V4=1., #V5=1., V6=1.,
+    def set_params(self, nspline=4,
+                   phi1=0., phi2=0., phi3=0., phi4=0.4,
+                   V1=0., V2=1., V3=1., V4=1.,
                    lengthscale=1.,
                    V0=1e-8, theta_i=0.0,frac_lambda0=0.):
         self.nspline = nspline
         self.phi1 = phi1
-        self.phi2 = phi2
-        self.phi3 = phi3
         self.phi4 = phi4
-        # self.phi5 = phi5
-        # self.phi6 = phi6
+
+        self.phi2, self.phi3 = self.order_transform([phi2, phi3],low=self.phi1,high=self.phi4, reverse=False)
+
         self.V1 = V1
-        self.V2 = V2
-        self.V3 = V3
-        self.V4 = V4
-        # self.V5 = V5
-        # self.V6 = V6
+        self.V2, self.V3, self.V4 = self.order_transform([V2, V3, V4],low=-2.,high=0., reverse=True)
         self.lengthscale = lengthscale
         self.V0 = V0
         self.theta_i = theta_i
-        # self.do_ordering = do_ordering
         self.frac_lambda0 = frac_lambda0
-        # self.use_zc = use_zc
 
-        # if do_order_transform:
-            # V = np.array([V2, V3, V4])
-        # phi = np.array([phi2, phi3, phi4])
-        # phis = order_transform(phi)
-        # self.phi2 = phis[0]
-        # self.phi3 = phis[1]
-        # self.phi4 = phis[2]
-            # Vs = order_transform(V)
-            # self.V2 = Vs[0]
-            # self.V3 = Vs[1]
-            # self.V4 = Vs[2]            
-        # else:
-        #     self.phi2 = phi2
-        #     self.phi3 = phi3
-        #     self.phi4 = phi4
-        #     # self.V2 = V2
-        #     # self.V3 = V3
-        #     # self.V4 = V4
+    def order_transform(self,params,low=0.,high=1.,reverse=False):
+        params = np.asarray(params, dtype=np.float64)
+        N = len(params)
+        index = np.arange(N)
+        inner_term = np.power(1 - params, 1/(N - index))
+        params = 1 - np.cumprod(inner_term, axis=-1)
+        if reverse:
+            params = params[::-1]
+        return params* (high - low) + low
 
 # short names for models that support w/wa
 F2003Class._class_names.update({"fluid": DarkEnergyFluid, "ppf": DarkEnergyPPF})

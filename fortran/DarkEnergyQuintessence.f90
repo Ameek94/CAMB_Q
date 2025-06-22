@@ -88,8 +88,8 @@
         real(dl) :: phi1, phi2, phi3, phi4 !, phi5, phi6 !nodes for spline
         real(dl) :: V1, V2, V3, V4 !, V5, V6 !potential at nodes
         real(dl) :: lengthscale = 0.5_dl !length scale for RBF kernel
-        logical :: do_ordering_phi = .true. !whether to order the nodes in phi in ascending order
-        logical :: do_ordering_V = .true. !whether to order the V values in descending order
+        logical :: do_ordering_phi = .false. !whether to order the nodes in phi in ascending order
+        logical :: do_ordering_V = .false. !whether to order the V values in descending order
         real(dl) :: V0 = 1e-8 !m in reduced Planck mass units
         real(dl) :: theta_i = 0_dl !initial field value
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
