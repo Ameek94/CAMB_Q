@@ -85,7 +85,7 @@
     class(TDarkEnergyModel) :: this
     real(dl) phi,Vofphi
     integer deriv
-    VofPhi = 0
+    Vofphi = 0
     call MpiStop('Quintessence classes must override to provide VofPhi')
     end function Vofphi
 
