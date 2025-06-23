@@ -941,7 +941,7 @@
 
     ! order the spline nodes if ordering is requested
     if (this%do_ordering_phi) then
-        call this%order_transform(phi_train, ordered_phi_train, this%nspline,0.0_dl, 0.5_dl, .false.)
+        call this%order_transform(phi_train, ordered_phi_train, this%nspline,0.0_dl, 0.4_dl, .false.)
         phi_train = ordered_phi_train
         if (FeedbackLevel > 1) then
             write (*,'(A)') 'After ordering phi_train'
@@ -1268,8 +1268,6 @@
             write(*,*) 'afrom, aend = ', afrom, aend
             write(*,*) 'V0, theta_i = ', this%V0, this%theta_i
         end if
-        ! write(*,*) 'TQuintessenceSpline error integrating', afrom, aend
-        ! write(*,*) this%V0, this%theta_i
         stop
         check_errorQ = .false.
         return

@@ -11,6 +11,7 @@ module GaussianPotential
     real(wp), allocatable :: phi_train(:)
     real(wp), allocatable :: alpha(:)
     real(wp) :: length_scale = 0.5_wp
+    real(wp) :: prior_mean   = 0.0_wp
     real(wp) :: variance     = 1.0_wp
     real(wp) :: noise        = 1e-6_wp
   contains
@@ -22,21 +23,22 @@ module GaussianPotential
 
 contains
 
-  subroutine GP_init(this, phi_vals, V_vals, ls, var, noise_in)
+  subroutine GP_init(this, phi_vals, V_vals, ls, prior_mean, var, noise_in)
     class(GPotentialRBF_type), intent(inout) :: this
     real(wp), intent(in) :: phi_vals(:), V_vals(:)
-    real(wp), intent(in), optional :: ls,var,noise_in
+    real(wp), intent(in), optional :: ls, prior_mean, var, noise_in
     integer :: i,j
     real(wp),allocatable :: K(:,:)
 
     this%N = size(phi_vals)
     allocate(this%phi_train(this%N), this%alpha(this%N))
     if(present(ls))      this%length_scale = ls
-    if(present(var))     this%variance     = var
+    if(present(prior_mean)) this%prior_mean = prior_mean
+    if(present(var))     this%variance   = var
     if(present(noise_in))this%noise        = noise_in
 
     this%phi_train = phi_vals
-    this%alpha     = V_vals
+    this%alpha     = (V_vals - this%prior_mean)
 
     allocate(K(this%N,this%N))
     do i=1,this%N
@@ -94,7 +96,7 @@ contains
     integer :: i
     real(wp) :: k_i
 
-    vout = 0.0_wp
+    vout = this%prior_mean !0.0_wp
     do i=1,this%N
       k_i = this%variance*exp(-0.5_wp*(phi_star-this%phi_train(i))**2/this%length_scale**2)
       vout = vout + k_i*this%alpha(i)
