@@ -1,0 +1,177 @@
+theory:
+  camb:
+    path: 'global' # /scratch/s.ameek.malhotra/CAMB_DE/CAMB_Spline/ #'global' #
+    stop_at_error: false
+    extra_args:
+      halofit_version: mead
+      bbn_predictor: PArthENoPE_880.2_standard.dat
+      lens_potential_accuracy: 1
+      num_massive_neutrinos: 1
+      nnu: 3.046
+      lmax: 750
+      dark_energy_model: QuintessenceSpline
+      nspline: 4
+      theta_H0_range:
+      - 10
+      - 200
+likelihood:
+  planck_2018_lowl.TT: null
+  planck_2018_lowl.EE: null
+  planck_2018_highl_plik.TTTEEE_lite_native: null
+  # planck_NPIPE_highl_CamSpec.TTTEEE: null
+  planck_2018_lensing.native: null
+  bao.desi_2024_bao_all: null
+  # bao.desi_dr2.desi_bao_all: null
+  sn.union3: null
+params:
+  lengthscale:
+    prior:
+      min: 0.1
+      max: 0.3
+    # ref:
+    #   dist: norm
+    #   loc: 0.1973
+    #   scale: 0.05
+    latex: \ell
+  phi2:
+    prior:
+      min: 0.
+      max: 1.
+    proposal: 0.01
+    latex: \phi_2
+    drop: True
+  phi3:
+    prior:
+      min: 0.
+      max: 1.
+    proposal: 0.01
+    latex: \phi_3
+    drop: True
+  V2:
+    prior:
+      min: 0.
+      max: 1.
+    # ref:
+    #   dist: norm
+    #   loc: 0.976419
+    #   scale: 0.05
+    proposal: 0.01
+    latex: V_2
+    drop: True
+  V3:
+    prior:
+      min: 0.
+      max: 1.
+    # ref:
+    #   dist: norm
+    #   loc: 0.773830
+    #   scale: 0.05
+    proposal: 0.01
+    latex: V_3
+    drop: True
+  V4:
+    prior:
+      min: 0.
+      max: 1.
+    # ref:
+    #   dist: norm
+    #   loc: 0.940659
+    #   scale: 0.05
+    proposal: 0.01
+    latex: V_4
+    drop: True
+  phi_train:
+    value: 'lambda phi2, phi3: [0.,phi2, phi3,0.4]'
+    derived: false
+  V_train:
+    value: 'lambda V2, V3, V4: [0.,V2, V3, V4]'
+    derived: false
+  omk: 0
+  omch2:
+    latex: \Omega_\mathrm{c} h^2
+    prior:
+      min: 0.11
+      max: 0.13
+    ref:
+      dist: norm
+      loc: 0.1184
+      scale: 0.001
+    proposal: 0.0005
+  ombh2: #0.02228
+    prior:
+      dist: norm # bbn prior if not using cmb
+      loc: 0.02218
+      scale: 0.00055
+      # min: 0.02
+      # max: 0.03
+    ref:
+      dist: norm
+      loc: 0.022633
+      scale: 0.0001
+    proposal: 0.0001
+    latex: \Omega_\mathrm{b} h^2
+  logA: 3.05
+    # prior:
+    #   min: 2.9
+    #   max: 3.2
+    # ref:
+    #   dist: norm
+    #   loc: 3.05
+    #   scale: 0.001
+    # proposal: 0.001
+    # latex: \log(10^{10} A_\mathrm{s})
+  As:
+    value: 'lambda logA: 1e-10*np.exp(logA)'
+    latex: A_\mathrm{s}
+  ns: 0.965
+    # prior:
+    #   min: 0.92
+    #   max: 1.0
+    # ref:
+    #   dist: norm
+    #   loc: 0.965
+    #   scale: 0.004
+    # proposal: 0.002
+    # latex: n_\mathrm{s}
+  H0:
+    latex: H_0
+    prior:
+      min: 64
+      max: 70
+    ref:
+      dist: norm
+      loc: 66.6
+      scale: 0.1
+    proposal: 0.05
+  tau: 0.055
+    # latex: \tau_\mathrm{reio}
+    # prior:
+    #   min: 0.025
+    #   max: 0.08
+    # ref:
+    #   dist: norm
+    #   loc: 0.055
+    #   scale: 0.006
+    # proposal: 0.003
+  mnu: 0.06
+  A_planck: 1.
+sampler:
+  # mcmc:
+  #   drag: false
+  #   oversample_power: 0.4
+  #   proposal_scale: 1.9
+  #   covmat: ./base_plikHM_TTTEEE_lowl_lowE_lensing_post_BAO.covmat
+  #   Rminus1_stop: 0.1
+  #   Rminus1_cl_stop: 0.2
+  #   max_tries: 10000
+  #   max_samples: 20000
+  # polychord:
+  #   nlive: 10d
+  #   precision_criterion: 0.1
+  #   maximise: True
+  # minimize:
+  #   method: scipy
+  #   best_of: 16
+# output: chains/spline_4_free_pchord
+output: chains/spline_4_free_cmb
+# minimize: true

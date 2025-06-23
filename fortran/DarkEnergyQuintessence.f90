@@ -85,17 +85,13 @@
         integer :: nspline = 4 !number of points in spline
         ! real(dl) :: phimin = 0_dl
         ! real(dl) :: phimax = 1_dl !range of phi for spline
-        real(dl) :: phi1, phi2, phi3, phi4 !, phi5, phi6 !nodes for spline
-        real(dl) :: V1, V2, V3, V4 !, V5, V6 !potential at nodes
+        real(dl), dimension(:), allocatable :: phi_train
+        real(dl), dimension(:), allocatable :: V_train
         real(dl) :: lengthscale = 0.5_dl !length scale for RBF kernel
-        logical :: do_ordering_phi = .true. !whether to order the nodes in phi in ascending order
-        logical :: do_ordering_V = .true. !whether to order the V values in descending order
         real(dl) :: V0 = 1e-8 !m in reduced Planck mass units
         real(dl) :: theta_i = 0_dl !initial field value
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
-        ! logical :: use_zc = .false. !adjust m to fit zc
-        ! real(dl) :: zc, fde_zc !redshift for peak f_de and f_de at that redshift
-        integer :: npoints = 5000 !baseline number of log a steps; will be increased if needed when there are oscillations
+        integer :: npoints = 6000 !baseline number of log a steps; will be increased if needed when there are oscillations
         integer :: min_steps_per_osc = 2
         real(dl), dimension(:), allocatable :: fde, ddfde
         real(dl) :: omega_tol = 1d-5 !tolerance for OmegaDE
@@ -105,7 +101,7 @@
     procedure :: Vofphi => TQuintessenceSpline_VofPhi
     procedure :: Init => TQuintessenceSpline_Init
     procedure :: ReadParams =>  TQuintessenceSpline_ReadParams
-    procedure, nopass :: order_transform
+    ! procedure, nopass :: order_transform
     procedure, nopass :: PythonClass => TQuintessenceSpline_PythonClass
     procedure, nopass :: SelfPointer => TQuintessenceSpline_SelfPointer
     ! procedure, private :: fdeAtaQ
@@ -119,61 +115,6 @@
 
     public TQuintessence, TEarlyQuintessence,TQuintessenceSpline
     contains
-
-    subroutine order_transform(x, t, N, minval, maxval, reverse)
-    implicit none
-    integer, intent(in) :: N
-    real(kind=8), intent(in) :: x(N)
-    real(kind=8), intent(out) :: t(N)
-    real(kind=8), intent(in), optional :: minval, maxval
-    logical, intent(in), optional :: reverse
-    real(kind=8) :: lo, hi, temp(N)
-    integer :: i
-
-    if (FeedbackLevel > 1) then
-        write(*,*) 'Doing ordering transform, N = ', N
-        write(*,*) 'order_transform: x = ', x
-        write(*,*) 'order_transform: t = ', t
-    end if
-
-    ! Set default min and max if not provided
-    if (present(minval)) then
-        lo = minval
-    else
-        lo = 0.0d0
-    end if
-    if (present(maxval)) then
-        hi = maxval
-    else
-        hi = 1.0d0
-    end if
-
-    ! Compute transformed values in reverse order
-    t(N) = x(N)**(1.0d0 / N)
-    do i = N-1, 2, -1
-        t(i) = x(i)**(1.0d0 / i) * t(i+1)
-    end do
-
-    ! Scale to [lo, hi]
-    t(1) = x(1)
-    do i = 2, N
-        t(i) = t(i) * (hi - lo) + lo
-    end do
-
-    ! If reverse flag is true, reverse order from 2..N
-    if (present(reverse)) then
-        if (reverse) then
-        ! Copy reversed values into temp
-        temp(1) = t(1)
-        do i = 2, N
-            temp(i) = t(N+2-i)
-        end do
-        ! Move back into t
-        t = temp
-        end if
-    end if
-
-    end subroutine order_transform
 
     function VofPhi(this, phi, deriv)
     !Get the quintessence potential as function of phi
@@ -284,13 +225,14 @@
     if (grhode < 0.0_dl) then
         global_error_flag = error_darkenergy
         global_error_message= 'TQuintessence EvolveBackground: negative grhode'
+        grhode = 0.0_dl
         ! if (FeedbackLevel > 0) then
         !     write(*,*) 'TQuintessence EvolveBackground: negative grhode'
         !     write(*,*) 'a, phi, phidot, grhode, tot = ', a, phi, phidot, grhode, tot
         ! end if
         ! stop 'TQuintessence EvolveBackground: negative grhode'
         ! error stop 'TQuintessence EvolveBackground: negative grhode'
-        return
+        ! return
     end if
 
     adot=sqrt(tot/3.0d0)
@@ -869,19 +811,21 @@
 
     !! GP for Log-dV/dphi
 
+    if (phi<0._dl) then
+        ! phi = -phi
+        Vout = 0.0_dl
+        return
+        ! Reflect potential around phi=0
+        ! logV  = this%gp%V(-phi)      ! = ln V(phi)
+        ! dlogV  = this%gp%Vd(-phi)     ! = d/dphi [ln V(phi)]
+        ! ddlogV = this%gp%Vdd(-phi)
+    end if
 
     ! GP for Log-Potential
     ! Evaluate log-potential GP and its derivatives:
     logV  = this%gp%V(phi)      ! = ln V(phi)
     dlogV  = this%gp%Vd(phi)     ! = d/dphi [ln V(phi)]
     ddlogV = this%gp%Vdd(phi)    ! = d2/dphi2 [ln V(phi)]
-
-    if (phi<0._dl) then
-        ! Reflect potential around phi=0
-        logV  = this%gp%V(-phi)      ! = ln V(phi)
-        dlogV  = this%gp%Vd(-phi)     ! = d/dphi [ln V(phi)]
-        ddlogV = this%gp%Vdd(-phi)
-    end if
 
     select case(deriv)
       case (0)
@@ -908,7 +852,7 @@
     real(dl), parameter :: splZero = 0._dl
     real(dl) lastsign, da_osc, last_a, a_c
     real(dl) initial_phi, initial_phidot, a2, logV0_in, logV0, logV0_1, logV0_2,logV0_low, logV0_high, deltalogV0, V0_input, om,om1,om2,atol,astart
-    real(dl), dimension(:), allocatable :: sampled_a, phi_a, phidot_a, fde, phi_train, V_train, ordered_phi_train, ordered_V_train
+    real(dl), dimension(:), allocatable :: sampled_a, phi_a, phidot_a, fde
     integer npoints, tot_points, max_ix
     logical has_peak, OK
     real(dl) fzero, xzero
@@ -918,52 +862,46 @@
     real(dl) log_params(2), param_min(2), param_max(2)
     ! real(dl), allocatable :: phi_train_use(:), V_train_use(:)
 
-    allocate(phi_train(this%nspline), V_train(this%nspline),ordered_phi_train(this%nspline),ordered_V_train(this%nspline))
-
-    phi_train(1) = this%phi1
-    phi_train(2) = this%phi2
-    phi_train(3) = this%phi3
-    phi_train(4) = this%phi4
-
-    V_train(1) = this%V1
-    V_train(2) = this%V2
-    V_train(3) = this%V3
-    V_train(4) = this%V4
-
-    ! print phi_train, V_train
-    if (FeedbackLevel > 1) then
-        write (*,'(A)') 'Initializing spline potential with phi_train, V_train, lengthscale'
-        write (*,*) ' Nspline = ', this%nspline
-        write (*,*) ' phi_train',  phi_train
-        write (*,*) ' V_train', V_train
-        write (*,*) 'Lengthscale', this%lengthscale
+    if (FeedbackLevel > 0) then
+        write (*,*) 'Using Phi train and V train values = ', this%phi_train, this%V_train
     end if
 
-    ! order the spline nodes if ordering is requested
-    if (this%do_ordering_phi) then
-        call this%order_transform(phi_train, ordered_phi_train, this%nspline,0.0_dl, 0.4_dl, .false.)
-        phi_train = ordered_phi_train
-        if (FeedbackLevel > 1) then
-            write (*,'(A)') 'After ordering phi_train'
-            write (*,*) ' phi_train',  ordered_phi_train
-        end if
-    end if
-    if (this%do_ordering_V) then
-        call this%order_transform(V_train, ordered_V_train, this%nspline,-2.0_dl, 0.0_dl, .true.)
-        ! do iter=1,this%nspline
-        V_train = ordered_V_train !10.0_dl**(ordered_V_train) ! !
-        ! end do
-        ! V_train = 10.0_dl**(ordered_V_train)
-        V_train(1) = this%V1
-        if (FeedbackLevel > 1) then
-            write (*,'(A)') 'After ordering V_train'
-            write (*,*) ' V_train', V_train
-        end if
-    end if
+    call this%gp%init(this%phi_train,this%V_train,this%lengthscale)
 
-    call this%gp%init(phi_train(1:this%nspline),V_train(1:this%nspline),this%lengthscale)
 
-    deallocate(ordered_phi_train, ordered_V_train, phi_train, V_train)
+    ! ! print phi_train, V_train
+    ! if (FeedbackLevel > 1) then
+    !     write (*,'(A)') 'Initializing spline potential with phi_train, V_train, lengthscale'
+    !     write (*,*) ' Nspline = ', this%nspline
+    !     write (*,*) ' phi_train',  phi_train
+    !     write (*,*) ' V_train', V_train
+    !     write (*,*) 'Lengthscale', this%lengthscale
+    ! end if
+
+    ! ! order the spline nodes if ordering is requested
+    ! if (this%do_ordering_phi) then
+    !     call this%order_transform(phi_train, ordered_phi_train, this%nspline,0.0_dl, 0.4_dl, .false.)
+    !     phi_train = ordered_phi_train
+    !     if (FeedbackLevel > 1) then
+    !         write (*,'(A)') 'After ordering phi_train'
+    !         write (*,*) ' phi_train',  ordered_phi_train
+    !     end if
+    ! end if
+    ! if (this%do_ordering_V) then
+    !     call this%order_transform(V_train, ordered_V_train, this%nspline,-2.0_dl, 0.0_dl, .true.)
+    !     ! do iter=1,this%nspline
+    !     V_train = ordered_V_train !10.0_dl**(ordered_V_train) ! !
+    !     ! end do
+    !     ! V_train = 10.0_dl**(ordered_V_train)
+    !     V_train(1) = this%V1
+    !     if (FeedbackLevel > 1) then
+    !         write (*,'(A)') 'After ordering V_train'
+    !         write (*,*) ' V_train', V_train
+    !     end if
+    ! end if
+
+
+    ! deallocate(ordered_phi_train, ordered_V_train, phi_train, V_train)
 
     ! allocate(test_V_values(100), test_phi_values(100))
 
@@ -1436,26 +1374,26 @@
     class(TIniFile), intent(in) :: Ini
 
     call this%TDarkEnergyModel%ReadParams(Ini)
-    this%nspline = Ini%Read_Int('nspline', 4)
-    this%do_ordering_phi = Ini%Read_Logical('do_ordering_phi', .true.)
-    this%do_ordering_V = Ini%Read_Logical('do_ordering_V', .true.)
-    ! this%phimin = Ini%Read_Double('phimin', 0.d0)
-    ! this%phimax = Ini%Read_Double('phimax', 1.d0)
-    this%V0 = Ini%Read_Double('V0', 1d-8)
-    this%theta_i = Ini%Read_Double('theta_i',0.d0)
-    this%phi1 = Ini%Read_Double('phi1', 0.1d0)
-    this%phi2 = Ini%Read_Double('phi2', 0.2d0)
-    this%phi3 = Ini%Read_Double('phi3', 0.3d0)
-    this%phi4 = Ini%Read_Double('phi4', 0.4d0)
-    ! this%phi5 = Ini%Read_Double('phi5', 0.5d0)
-    ! this%phi6 = Ini%Read_Double('phi6', 0.6d0)
-    this%V1 = Ini%Read_Double('V1', 0.1d0)
-    this%V2 = Ini%Read_Double('V2', 0.2d0)
-    this%V3 = Ini%Read_Double('V3', 0.3d0)
-    this%V4 = Ini%Read_Double('V4', 0.4d0)
-    ! this%V5 = Ini%Read_Double('V5', 0.5d0)
-    ! this%V6 = Ini%Read_Double('V6', 0.6d0)
-    this%lengthscale = Ini%Read_Double('lengthscale', 0.5_dl)
+    ! this%nspline = Ini%Read_Int('nspline', 4)
+    ! this%do_ordering_phi = Ini%Read_Logical('do_ordering_phi', .true.)
+    ! this%do_ordering_V = Ini%Read_Logical('do_ordering_V', .true.)
+    ! ! this%phimin = Ini%Read_Double('phimin', 0.d0)
+    ! ! this%phimax = Ini%Read_Double('phimax', 1.d0)
+    ! this%V0 = Ini%Read_Double('V0', 1d-8)
+    ! this%theta_i = Ini%Read_Double('theta_i',0.d0)
+    ! this%phi1 = Ini%Read_Double('phi1', 0.1d0)
+    ! this%phi2 = Ini%Read_Double('phi2', 0.2d0)
+    ! this%phi3 = Ini%Read_Double('phi3', 0.3d0)
+    ! this%phi4 = Ini%Read_Double('phi4', 0.4d0)
+    ! ! this%phi5 = Ini%Read_Double('phi5', 0.5d0)
+    ! ! this%phi6 = Ini%Read_Double('phi6', 0.6d0)
+    ! this%V1 = Ini%Read_Double('V1', 0.1d0)
+    ! this%V2 = Ini%Read_Double('V2', 0.2d0)
+    ! this%V3 = Ini%Read_Double('V3', 0.3d0)
+    ! this%V4 = Ini%Read_Double('V4', 0.4d0)
+    ! ! this%V5 = Ini%Read_Double('V5', 0.5d0)
+    ! ! this%V6 = Ini%Read_Double('V6', 0.6d0)
+    ! this%lengthscale = Ini%Read_Double('lengthscale', 0.5_dl)
 
     end subroutine TQuintessenceSpline_ReadParams
 
