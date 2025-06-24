@@ -8,6 +8,7 @@ from scipy.interpolate import interp1d, UnivariateSpline
 font = {'size': 16}
 matplotlib.rc('font', **font)
 matplotlib.rc('text',usetex=True)
+import faulthandler; faulthandler.enable()
 
 print('Using CAMB %s installed at %s'%(camb.__version__,os.path.dirname(camb.__file__)))
 
@@ -68,7 +69,7 @@ pars.Accuracy.BackgroundTimeStepBoost=2.
 # z1 = np.logspace(5,-2,500)
 # z2 = np.linspace(0.01,0.)
 # zs = np.concatenate((z1,z2))
-zs = np.linspace(0,2.4,100)
+zs = np.linspace(0,2.4,500)
 scales = 1/(1+zs)
 Ns = np.log(scales)
 
@@ -78,10 +79,10 @@ ax[1,1].set_ylabel(r'$\Delta D_\ell^{TT} [\mu {\rm K}^2]$')
 ax[1,1].set_xlabel(r'$\ell$')
 ax[0,1].set_xlabel(r'$\ell$')
 ax[0,0].set_ylabel(r'$\Omega_{\rm DE}$')
-ax[1,0].set_ylabel(r'$w_{\rm DE}$')
+ax[1,0].set_ylabel(r'$V_{\phi}/V_0$')
 ax[2,0].set_ylabel(r'$\phi$')
 ax[0,0].set_xlabel(r'$z$')
-ax[1,0].set_xlabel(r'$z$')
+ax[1,0].set_xlabel(r'$\phi$')
 ax[2,0].set_xlabel(r'$z$')
 ax[2,1].set_xlabel(r'$z$')
 ax[2,1].set_ylabel(r'$\dot{\phi}$')
@@ -99,30 +100,38 @@ ls_LCDM = np.arange(cl_LCDM.shape[0])
 
 dark_energy_model  = 'QuintessenceSpline'
 nspline = 4
-keys = ["omch2", "H0","lengthscale"] + [f"V{i+1}" for i in range(1,nspline)] + \
-       [f"phi{i+1}" for i in range(1,nspline)]
-filepath = f"cobaya_input/chains/spline_{nspline}_free.minimum.txt"
-subset = load_data_with_subset(filepath, keys)
-# print(subset)
-    # => {'V2': 0.90901738, 'V3': 0.80273055, 'V4': 0.77630574,
-    #     'V5': 0.9018205,   'omch2': 0.12074249, 'H0': 66.674175}
 
-subset['V1'] = 1.01
-# subset['V6'] = 0.
-subset['phi1'] = 0.
-# subset['phi2'] = 0.2
-# subset['phi3'] = 0.4
-# subset['phi4'] = 0.6
-# subset['phi5'] = 0.8
-# subset['phi6'] = 1.
-subset['nspline'] = nspline
-subset['ombh2'] = 0.0224
-print(subset)
+lengthscale = 0.227583
+phi2 = 0.145538
+phi3 = 0.365877
+V2 = -0.113892
+V3 = -0.501610
+V4 = -0.537975
+omch2 = 0.118606
+ombh2 = 0.022403
+H0 = 67.434374
+phi_train = [phi2, phi3]
+V_train = [V2, V3, V4]
 
+phi_train = np.concatenate([[0.],phi_train, [0.4]])
+V_train = np.concatenate([[0.],V_train])
+
+print(f"phi train = {phi_train}")
+print(f"V train = {V_train}")
+
+# for key in param_dict:
+# #     param_dict[key] = float(param_dict[key])
+
+# print(f'Using best fit parameters: {param_dict}')
+
+# keys = ['lengthscale', 'ombh2', 'omch2', 'H0']
+# vals_dict = dict(zip(keys, [param_dict[key] for key in keys]))
 
 camb.set_feedback_level(level=2)
 pars = camb.set_params(V0= 1e-8,
-                       dark_energy_model='QuintessenceSpline',**subset)
+                       dark_energy_model='QuintessenceSpline',
+                       ombh2=ombh2, omch2=omch2, H0=H0,
+                       phi_train=phi_train, V_train=V_train, nspline=nspline)
 
 # pars.set_accuracy(AccuracyBoost=4.)
 # camb.model.AccuracyParams(AccuracyBoost=2.,BackgroundTimeStepBoost=2.)
@@ -135,19 +144,29 @@ for param in om:
 omdict = dict(zip(om,omega0))
 print("Energy Densities: "+"".join(f"{key} = {value:.6f}, " for key, value in omdict.items()))
 print('Sum of energy densities = {:.6f}\n'.format(sum(omega0)))
-wde = np.array(results.get_dark_energy_rho_w(1/(1+zs))).T
-ax[1,0].plot(zs,wde[:,1])
 ax[0,0].plot(zs,results.get_Omega('de',z=zs),label='Spline')
 cl = results.get_lensed_scalar_cls(CMB_unit='muK')
 ls = np.arange(0,cl.shape[0])
 ax[1,1].plot(ls[2:],cl[2:,0]-cl_LCDM[2:,0],label='Spline')
 ax[0,1].plot(ls[2:],cl[2:,0],label='Spline')
 ev_phi = np.array(results.get_dark_energy_phi_phidot(1/(1+zs))).T
+phis = np.linspace(0.,max(ev_phi[:,0]),100)
+Vphis = np.array(results.get_dark_energy_Vphi(phis))
+# np.savetxt('spline_quintessence_Vphis.txt',np.array([phis,Vphis]).T,header='phi Vphi')
+# phis = np.linspace(0,0.4,100)
+# V_phi = np.array(results.get_dark_energy_Vphi(phis))
+# V0 =  V_phi[0]
+# V_phi_realized = np.array(results.get_dark_energy_Vphi(ev_phi[:,0]))
+# print(f"Vphi0 = {V_phi[0]:.4e}, Vphi_realized0 = {V_phi_realized[0]:.4e}")
+# V_phi = V_phi / V0  # Normalize to V(0)
+# V_phi_realized = V_phi_realized / V0  # Normalize to V(0)
+Vphis = Vphis / Vphis[0]  # Normalize to V(0)
 ax[2,0].plot(zs,ev_phi[:,0],label='Spline')
 ax[2,1].plot(zs,ev_phi[:,1]/scales,label='Spline')
-
+ax[1,0].plot(phis,Vphis)
+ax[1,0].scatter(phi_train,np.exp(V_train),color='red')
+# ax[1,0].plot(ev_phi[:,0],V_phi_realized,ls='--',color='C3')
 print(f'LCDM: thetamc = {results.cosmomc_theta():.6f}')
-wde = np.array(results_LCDM.get_dark_energy_rho_w(1/(1+zs))).T
 om = ['K', 'cdm', 'baryon', 'photon', 'neutrino' , 'nu', 'de']
 omega0 = []
 for param in om:
@@ -157,22 +176,52 @@ print("Energy Densities: "+"".join(f"{key} = {value:.6f}, " for key, value in om
 print('Sum of energy densities = {:.6f}\n'.format(sum(omega0)))
 ax[0,1].plot(ls[2:],cl_LCDM[2:,0],label='LCDM',color='k',ls='-.')
 ax[0,0].plot(zs,results_LCDM.get_Omega('de',z=zs),label=r'LCDM',color='k',ls='-.')
-ax[1,0].plot(zs,wde[:,1],color='k',ls='-.')
-wz_m = np.loadtxt('wz_median.txt',skiprows=0,delimiter=',')
-wz_ul = np.loadtxt('wz_ul.txt',skiprows=0,delimiter=',')
-wz_ll = np.loadtxt('wz_ll.txt',skiprows=0,delimiter=',')
 
+ax[0,0].legend()
+# ax[1,0].legend()
+fig.suptitle(f'Spline Quintessence, n = {nspline}')
+# fig.tight_layout()
+plt.savefig(f'SplineQ_{nspline}_summary_cmb.pdf',bbox_inches='tight')
+# plt.show()
+
+fig,ax = plt.subplots(1,2,figsize=(15,4),layout='constrained')
+
+for x in ax:
+    x.set_xlabel(r'$z$')
+ax[0].set_ylabel(r'$w_{\rm DE}(z)$')
+ax[1].set_ylabel(r'$h(z)/h^{\rm LCDM}$')
+
+wde = np.array(results.get_dark_energy_rho_w(1/(1+zs))).T
+print(f'Quintessence wde at z=0 = {wde[0,1]:.6f}')
+ax[0].plot(zs,wde[:,1],label='Spline',color='C0')
+wde = np.array(results_LCDM.get_dark_energy_rho_w(1/(1+zs))).T
+ax[0].plot(zs,wde[:,1],color='k',ls='-.')
+wz_m = np.loadtxt('../wz_median.txt',skiprows=0,delimiter=',')
+wz_ul = np.loadtxt('../wz_ul.txt',skiprows=0,delimiter=',')
+wz_ll = np.loadtxt('../wz_ll.txt',skiprows=0,delimiter=',')
 f_ll = UnivariateSpline(wz_ll[:,0],wz_ll[:,1],s=0)
 f_ul = UnivariateSpline(wz_ul[:,0],wz_ul[:,1],s=0)
 f_m = UnivariateSpline(wz_m[:,0],wz_m[:,1],s=0)
-ax[1,0].plot(zs,f_m(zs),color='k',label='DESI+Union3')
-ax[1,0].fill_between(zs,f_ll(zs),f_ul(zs),color='k',alpha=0.2)
+ax[0].plot(zs,f_m(zs),color='C1',label=r'DESI+Union3')
+ax[0].fill_between(zs,f_ll(zs),f_ul(zs),color='C1',alpha=0.2)
+ax[0].set_ylim(-2.,0.)
+ax[0].legend()
+
+hz_LCDM = np.array(results_LCDM.h_of_z(zs))/hubble
+hubble_spline = H0
+hz_spline = np.array(results.h_of_z(zs))/hubble_spline
+ax[1].plot(zs,hz_spline/hz_LCDM,lw=1.5)
+ax[1].axhline(1,ls='-.',color='k',label='LCDM')
+
+hz_m = np.loadtxt('../hz_hlcdm_median.txt',skiprows=0,delimiter=',')
+hz_ul = np.loadtxt('../hz_hlcdm_ul.txt',skiprows=0,delimiter=',')
+hz_ll = np.loadtxt('../hz_hlcdm_ll.txt',skiprows=0,delimiter=',')
+f_ll = UnivariateSpline(hz_ll[:,0],hz_ll[:,1],s=0)
+f_ul = UnivariateSpline(hz_ul[:,0],hz_ul[:,1],s=0)
+f_m = UnivariateSpline(hz_m[:,0],hz_m[:,1],s=0)
+f_m2 = UnivariateSpline(hz_m[:,0],hz_m[:,1]) #smooth
+ax[1].plot(zs,f_m(zs),color='C1',label=r'DESI+Union3')
+ax[1].fill_between(zs,f_ul(zs),f_ll(zs),alpha=0.2,color='C1')
 
 
-
-
-ax[0,0].legend()
-fig.suptitle(f'Spline Quintessence, n = {nspline}')
-# fig.tight_layout()
-plt.savefig(f'spline_quintessence_{nspline}_free.pdf',bbox_inches='tight')
-plt.show()
+plt.savefig(f'SplineQ_wz_Hz_{nspline}_cmb.pdf',bbox_inches='tight')
