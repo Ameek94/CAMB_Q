@@ -99,14 +99,17 @@ cl_LCDM = results_LCDM.get_lensed_scalar_cls(CMB_unit='muK')
 ls_LCDM = np.arange(cl_LCDM.shape[0])
 
 dark_energy_model  = 'QuintessenceSpline'
-nspline = 5
+nspline = 4
 # best = [ 0.2626463,   0.1516598,  0.19139063,  0.54042736,  0.96223259,  0.94526461,
 #   0.4897642,   0.120686,   65.98024839]
-param_list = ['lengthscale', 'phi2', 'phi3', 'phi4', 'V2', 'V3', 'V4', 'V5', 'omch2', 'ombh2',  'H0']
+# param_list = ['lengthscale', 'phi2', 'phi3', 'phi4', 'V2', 'V3', 'V4', 'V5', 'omch2', 'ombh2',  'H0']
 
-param_vals = [0.2327419, 0.10222032, 0.21324772, 0.28197778,     -0.15188621,     -0.29824373,     -0.47269391,    -0.031482106,      0.11170333,      0.02230186,       65.483972]
+# param_vals = [0.2327419, 0.10222032, 0.21324772, 0.28197778,     -0.15188621,     -0.29824373,     -0.47269391,    -0.031482106,      0.11170333,      0.02230186,       65.483972]
 
-param_dict = dict(zip(param_list, param_vals))
+# param_dict = dict(zip(param_list, param_vals))
+
+param_dict = {'lengthscale': '0.3000', 'phi2': '0.0180', 'phi3': '0.0513', 'V2': '-0.1992', 'V3': '-0.1998', 'V4': '-0.2179', 'omch2': '0.1173', 'ombh2': '0.0225', 'H0': '68.4512'}
+param_dict = {k: float(v) for k, v in param_dict.items()}
 
 phi_train = [param_dict['phi'+str(i)] for i in range(2,nspline)]
 V_train = [param_dict['V'+str(i)] for i in range(2,nspline+1)]
