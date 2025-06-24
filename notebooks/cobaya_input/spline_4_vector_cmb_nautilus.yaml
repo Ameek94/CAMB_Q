@@ -20,8 +20,8 @@ likelihood:
   planck_2018_highl_plik.TTTEEE_lite_native: null
   # planck_NPIPE_highl_CamSpec.TTTEEE: null
   planck_2018_lensing.native: null
-  bao.desi_2024_bao_all: null
-  # bao.desi_dr2.desi_bao_all: null
+  # bao.desi_2024_bao_all: null
+  bao.desi_dr2.desi_bao_all: null
   sn.union3: null
 params:
   lengthscale:
@@ -49,7 +49,7 @@ params:
     drop: True
   V2:
     prior:
-      min: -0.5
+      min: -0.75
       max: 0.
     # ref:
     #   dist: norm
@@ -60,7 +60,7 @@ params:
     drop: True
   V3:
     prior:
-      min: -0.5
+      min: -0.75
       max: 0.
     # ref:
     #   dist: norm
@@ -71,7 +71,7 @@ params:
     drop: True
   V4:
     prior:
-      min: -0.5
+      min: -0.75
       max: 0.
     # ref:
     #   dist: norm

@@ -94,7 +94,7 @@ def main():
 
     sampler = Sampler(prior, loglikelihood, ndim, pass_dict=False,filepath=f'spline_quintessence.h5',
                       prior_kwargs=prior_kwargs, likelihood_kwargs=likelihood_kwargs,
-                      resume=True,pool=None)
+                      resume=False,pool=None)
 
     sampler.run(verbose=True, f_live=0.05,n_like_max=int(1e5))
     print('log Z: {:.2f}'.format(sampler.log_z))

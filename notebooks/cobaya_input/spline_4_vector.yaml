@@ -15,68 +15,76 @@ theory:
       - 10
       - 200
 likelihood:
-  # planck_2018_lowl.TT: null
-  # planck_2018_lowl.EE: null
-  # planck_2018_highl_plik.TTTEEE_lite_native: null
+  planck_2018_lowl.TT: null
+  planck_2018_lowl.EE: null
+  planck_2018_highl_plik.TTTEEE_lite_native: null
   # planck_NPIPE_highl_CamSpec.TTTEEE: null
-  # planck_2018_lensing.native: null
-  bao.desi_2024_bao_all: null
-  # bao.desi_dr2.desi_bao_all: null
+  planck_2018_lensing.native: null
+  # bao.desi_2024_bao_all: null
+  bao.desi_dr2.desi_bao_all: null
   sn.union3: null
 params:
   lengthscale:
     prior:
       min: 0.1
       max: 0.3
-    # ref:
-    #   dist: norm
-    #   loc: 0.1973
-    #   scale: 0.05
+    ref:
+      dist: norm
+      loc: 0.1973
+      scale: 0.05
     latex: \ell
   phi2:
     prior:
       min: 0.
-      max: 1.
+      max: 0.4
+    ref:
+      dist: norm
+      loc: 0.05
+      scale: 0.01
     proposal: 0.01
     latex: \phi_2
     drop: True
   phi3:
     prior:
       min: 0.
-      max: 1.
+      max: 0.4
+    ref:
+      dist: norm
+      loc: 0.15
+      scale: 0.05
     proposal: 0.01
     latex: \phi_3
     drop: True
   V2:
     prior:
-      min: 0.
-      max: 1.
-    # ref:
-    #   dist: norm
-    #   loc: 0.976419
-    #   scale: 0.05
+      min: -0.6
+      max: 0.
+    ref:
+      dist: norm
+      loc: -0.05
+      scale: 0.001
     proposal: 0.01
     latex: V_2
     drop: True
   V3:
     prior:
-      min: 0.
-      max: 1.
-    # ref:
-    #   dist: norm
-    #   loc: 0.773830
-    #   scale: 0.05
+      min: -0.6
+      max: 0.
+    ref:
+      dist: norm
+      loc: -0.2
+      scale: 0.025
     proposal: 0.01
     latex: V_3
     drop: True
   V4:
     prior:
-      min: 0.
-      max: 1.
-    # ref:
-    #   dist: norm
-    #   loc: 0.940659
-    #   scale: 0.05
+      min: -0.6
+      max: 0.
+    ref:
+      dist: norm
+      loc: -0.4
+      scale: 0.025
     proposal: 0.01
     latex: V_4
     drop: True

@@ -40,6 +40,29 @@ def save_best(filename, best_f, param_labels, best_point):
         f.write(" ".join(f"{v:.6g}" for v in best_point) + "\n")
     print(f"[Rank 0] Wrote new best result to {filename}.")
 
+def order_transform(unit_x, low=0., high=1., reverse=False):
+    """
+    Transform the input vector x to a new order.
+    If reverse is True, it will reverse the order of the elements.
+    """
+    n = np.size(unit_x, axis=-1)
+    index = np.arange(n)
+    inner_term = np.power(1 - unit_x, 1/(n - index))
+    unit_y = 1 - np.cumprod(inner_term, axis=-1)
+    if reverse:
+        unit_y =  unit_y[::-1]
+    return unit_y * (high - low) + low
+
+def inverse_order_transform(unit_y, low=0., high=1., reverse=False):
+    if reverse:
+        unit_y = unit_y[::-1]
+    n = np.size(unit_y, axis=-1)
+    index = np.arange(n)
+    unit_y_shifted = np.roll(unit_y, 1, axis=-1)
+    unit_y_shifted[...,0] = 0
+    unit_x = 1 - np.power((1 - unit_y) / (1 - unit_y_shifted), n - index)
+    return unit_x * (high - low) + low
+
 def input_standardize(x,param_bounds):
     """
     Project from original domain to unit hypercube, X is N x d shaped, param_bounds are 2 x d
@@ -54,16 +77,41 @@ def input_unstandardize(x,param_bounds):
     x = x * (param_bounds[1] - param_bounds[0]) + param_bounds[0]
     return x
 
+def prior(x,param_bounds,nspline=4):
+    """Transform input x in [0,1] to the physical parameter space."""
+    params = x.copy()
+    phis = params[1:nspline-1]
+    phis = order_transform(phis,reverse=False)
+    Vs = params[nspline-1: 2*(nspline-1)]
+    # print(f"phis: {phis}, Vs: {Vs}")
+    Vs = order_transform(Vs, reverse=True)
+    x = np.concatenate([[params[0]], phis, Vs, params[2*(nspline - 1):]])
+    return input_unstandardize(x, param_bounds)
 
-def loglikelihood(x,param_bounds,cobaya_model):
-    x = input_unstandardize(x, param_bounds)
+def inverse_prior(x, param_bounds, nspline=4):
+    """Transform input x in physical parameter space to [0,1]."""
+    x = input_standardize(x, param_bounds)
+    params = x.copy()
+    ordered_phis = params[1:nspline-1]
+    phis = inverse_order_transform(ordered_phis, reverse=False)
+    ordered_Vs = params[nspline-1: 2*(nspline-1)]
+    Vs = inverse_order_transform(ordered_Vs, reverse=True)
+    x = np.concatenate([[params[0]], phis, Vs, params[2*(nspline - 1):]])
+    return x
+
+def loglikelihood(x,cobaya_model=None,param_list=[],param_bounds=[]):
+    x = prior(x, param_bounds)
+    param_dict = dict(zip(param_list, x))
+    # print(f"Parameters: {param_dict}")
     # try:
-    res = cobaya_model.loglike(x, make_finite=True,return_derived=False)
+    res = cobaya_model.loglike(param_dict, make_finite=True,return_derived=False,)
     if res < -1e5:
         res = -1e5
-    # except BaseException as e:
-    #     res = -1e5
-    return res
+    # except:
+        # res = -1e5
+    vals = {k: f'{v:.4f}' for k, v in param_dict.items()}
+    # print(f"Parameters {vals} with loglike {res:.4f}")
+    return res #+ logprior_vol
 
 def make_monitoring_func(fun, worker_id, print_every=100):
     state = {
@@ -103,7 +151,7 @@ def solve_basinhopping(x0, raw_func, maxfun, args = (), kwargs = {}, init_parall
                        niter=1000,
                        stepsize=0.4,
                        minimizer_kwargs={'method': 'L-BFGS-B', 'bounds': bounds, 'options': {'maxfun': maxfun}})
-    
+
     print(f"Worker {worker_id} finished with best val = {-res.fun:.4f}.")
 
     return -res.fun, res.x
@@ -127,7 +175,7 @@ def worker_solve_bobyqa(x0, raw_func, maxfun, args = (), kwargs = {},
         maxfun=maxfun,
         seek_global_minimum=seek_global_minimum,
         user_params={'init.run_in_parallel': init_parallel},
-        print_progress=True,
+        print_progress=False,
     )
     print(f"Worker {worker_id} finished with {res.nf} function evaluations, best val = {res.f:.4f}.")
 
@@ -150,7 +198,7 @@ def main():
 
     # --- All ranks load the model independently ---
     # input_file = './spline_4_free_external.yaml'
-    input_file = './spline_4_fixed_external.yaml'
+    input_file = './spline_4_vector.yaml'
 
     info = yaml_load(input_file)
     cobaya_model = get_model(info)
@@ -170,20 +218,36 @@ def main():
 
     # sample a pool of initial points on rank 0…
     if rank == 0:
-        seeds = np.random.SeedSequence(12345).spawn(size-1)
+        # seeds = np.random.SeedSequence(12345).spawn(size)
+        inits = []
+        # for ss in seeds:
+        x0 = np.random.uniform(0.0, 1.0, size=(1000,len(param_list)))
+        for x in x0:
+            val = loglikelihood(x, cobaya_model=cobaya_model, param_list=param_list, param_bounds=param_bounds)
+            if val> -1e5:
+                print(f"Rank {rank} got loglike {val:.4f} for x = {x}\n")
+                phys_x = prior(x, param_bounds)
+                phys_x_dict = {k: f"{float(v):.6f}" for k, v in zip(param_list, phys_x)}
+                print(f"Initial point: {phys_x_dict} with loglike = {val:.4f} at rank {rank}\n")
+                inits.append(x)
+            if len(inits) >= size:
+                break
         # param_dict = {'lengthscale': 0.197173, 'phi2': 0.125951, 'phi3': 0.056194, 'phi4': 0.1923, 'V2': 0.999935, 'V3': 0.774321, 'V4': 0.940254, 'omch2': 0.119289, 'ombh2': 0.022536, 'H0': 66.523051}
-        param_dict = {'lengthscale': 0.123939, 'phi2': '0.283628', 'phi3': '0.421014', 'V2': '0.443599', 'V3': '0.705376', 'V4': '0.019240', 'omch2': '0.565322', 'ombh2': '0.333276', 'H0': '0.669330'}
-        param_dict = {k: float(v) for k, v in param_dict.items() if k in param_list}
-        val = cobaya_model.loglike(param_dict, make_finite=True, return_derived=False)
-        inits = [input_standardize(np.array(list(param_dict.values())), param_bounds)]
-        print(f"Initial point: {param_dict} with loglike = {val} at rank {rank}")
-        for ss in seeds:
-            rng = np.random.default_rng(ss)
-            x0, val = cobaya_model.get_valid_point(1000, ignore_fixed_ref=False,
-                                                   logposterior_as_dict=True)
-            init_pt_dict = {k: f"{float(val):.4f}" for k, val in zip(param_list, x0)}
-            print(f"Initial point: {init_pt_dict} with loglike = {val['loglikes']} at rank {rank}")
-            inits.append(input_standardize(x0, param_bounds))
+        # param_dict = {'lengthscale': 0.123939, 'phi2': '0.283628', 'phi3': '0.421014', 'V2': '0.443599', 'V3': '0.705376', 'V4': '0.019240', 'omch2': '0.565322', 'ombh2': '0.333276', 'H0': '0.669330'}
+        # param_dict = {k: float(v) for k, v in param_dict.items() if k in param_list}
+        # val = cobaya_model.loglike(param_dict, make_finite=True, return_derived=False)
+        # inits = [input_standardize(np.array(list(param_dict.values())), param_bounds)]
+        # print(f"Initial point: {param_dict} with loglike = {val} at rank {rank}")
+        # inits = []
+        # inits = np.random.uniform(0.0,1.0, size=(size,len(param_list)))
+        # print(f"Initial points shape: {inits.shape}")
+        # for ss in seeds:
+        #     rng = np.random.default_rng(ss)
+        #     x0, val = cobaya_model.get_valid_point(1000, ignore_fixed_ref=False,
+        #                                            logposterior_as_dict=True)
+        #     init_pt_dict = {k: f"{float(val):.4f}" for k, val in zip(param_list, x0)}
+        #     print(f"Initial point: {init_pt_dict} with loglike = {val['loglikes']} at rank {rank}")
+        #     inits.append(inverse_prior(x0, param_bounds))
     else:
         inits = None
 
@@ -191,28 +255,40 @@ def main():
     x0_std = comm.scatter(inits, root=0)
 
     # pick solver from command‑line
-    solver = str(sys.argv[1]) 
-    maxfun = int(sys.argv[2]) 
+    solver = str(sys.argv[1])
+    maxfun = int(sys.argv[2])
 
     comm.Barrier()
     log("entering optimizer", start_time=start_time, rank=rank)
 
-    if rank > 0:
-        if solver == 'scipy':
-            local_f, local_x = solve_basinhopping(
-                x0=x0_std, raw_func=loglikelihood, maxfun=maxfun,
-                kwargs={'param_bounds':param_bounds,'cobaya_model': cobaya_model},
-                worker_id=rank)
-        elif solver == 'bobyqa':
-            local_f, local_x = worker_solve_bobyqa(
-                x0=x0_std, raw_func=loglikelihood, maxfun=maxfun,
-                kwargs={'param_bounds':param_bounds,'cobaya_model': cobaya_model},
-                worker_id=rank)
+    nrestarts = 1
+
+    best_local_f = -np.inf
+    best_local_x = None
+    for i in range(nrestarts):
+        if rank > 0:
+            if solver == 'scipy':
+                local_f, local_x = solve_basinhopping(
+                    x0=x0_std, raw_func=loglikelihood, maxfun=maxfun,
+                    kwargs={'param_bounds':param_bounds,'cobaya_model': cobaya_model, 'param_list': param_list},
+                    worker_id=rank)
+
+            elif solver == 'bobyqa':
+                local_f, local_x = worker_solve_bobyqa(
+                    x0=x0_std, raw_func=loglikelihood, maxfun=maxfun,
+                    kwargs={'param_bounds':param_bounds,'cobaya_model': cobaya_model, 'param_list': param_list},
+                    worker_id=rank)
+            else:
+                raise ValueError(f"Unknown solver: {solver}")
+
+            if local_f > best_local_f:
+                best_local_f = local_f
+                best_local_x = local_x
+                print(f"[Rank {rank}] New best local f = {best_local_f:.6f} at iteration {i+1}.")
+                x0_std = best_local_x.copy()  # update x0 for next iteration
         else:
-            raise ValueError(f"Unknown solver: {solver}")
-    else:
         # Dummy result for rank 0
-        local_f, local_x = -np.inf, np.zeros_like(x0_std)
+            best_local_f, best_local_x = -np.inf, np.zeros_like(x0_std)
 
 
     # # run the local optimization
@@ -248,18 +324,18 @@ def main():
     log("about to gather", start_time=start_time, rank=rank)
 
     # gather all (f, x) pairs to rank 0
-    all_results = comm.gather((local_f, local_x), root=0)
+    all_results = comm.gather((best_local_f, best_local_x), root=0)
 
     if rank == 0:
         # pick the global best
         print(f"\n=== RANK {rank} RESULTS ===")
         for i, (f, x) in enumerate(all_results):
-            point = input_unstandardize(x, param_bounds)
+            point = prior(x,param_bounds) #input_unstandardize(x, param_bounds)
             point_dict = {k: f"{float(val):.4f}" for k, val in zip(param_list, point)}
             print(f"Worker {i}: loglike = {f:.6f}, params = {point_dict}")
 
         best_f, best_x = max(all_results, key=lambda fx: fx[0])
-        best_point = input_unstandardize(best_x, param_bounds)
+        best_point = prior(best_x, param_bounds) #input_unstandardize(best_x, param_bounds)
         print(f"\n=== GLOBAL BEST ===")
         print(f"loglike = {best_f:.6f}")
         best_point_dict = {k: f"{float(val):.6f}" for k, val in zip(param_list, best_point)}
