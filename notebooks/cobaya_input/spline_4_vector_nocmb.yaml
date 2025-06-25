@@ -15,11 +15,11 @@ theory:
       - 10
       - 200
 likelihood:
-  planck_2018_lowl.TT: null
-  planck_2018_lowl.EE: null
-  planck_2018_highl_plik.TTTEEE_lite_native: null
+  # planck_2018_lowl.TT: null
+  # planck_2018_lowl.EE: null
+  # planck_2018_highl_plik.TTTEEE_lite_native: null
   # planck_NPIPE_highl_CamSpec.TTTEEE: null
-  planck_2018_lensing.native: null
+  # planck_2018_lensing.native: null
   bao.desi_2024_bao_all: null
   # bao.desi_dr2.desi_bao_all: null
   sn.union3: null
@@ -106,11 +106,11 @@ params:
     proposal: 0.0005
   ombh2: #0.02228
     prior:
-      # dist: norm # bbn prior if not using cmb
-      # loc: 0.02218
-      # scale: 0.00055
-      min: 0.021
-      max: 0.023
+      dist: norm # bbn prior if not using cmb
+      loc: 0.02218
+      scale: 0.00055
+      # min: 0.021
+      # max: 0.023
     ref:
       dist: norm
       loc: 0.022633
@@ -161,7 +161,7 @@ params:
     #   scale: 0.006
     # proposal: 0.003
   mnu: 0.06
-  A_planck: 1.
+  # A_planck: 1.
 sampler:
   # mcmc:
   #   drag: false

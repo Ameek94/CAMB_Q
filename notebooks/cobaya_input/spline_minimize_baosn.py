@@ -1,3 +1,4 @@
+import argparse
 import sys, os, time
 import numpy as np
 from scipy.optimize import basinhopping
@@ -64,17 +65,25 @@ def input_unstandardize(x, param_bounds):
 
 
 def prior(x, param_bounds, nspline=4):
+    """ Transform the input x in the unit cube to the physical parameter space. """
     params = x.copy()
-    phis = order_transform(params[1:nspline-1], reverse=False)
-    Vs = order_transform(params[nspline-1:2*(nspline-1)], reverse=True)
-    x_phys = np.concatenate([[params[0]], phis, Vs, params[2*(nspline-1):]])
+    phis = order_transform(params[1:nspline], reverse=False)
+    Vs = order_transform(params[nspline:2*(nspline-1) + 1], reverse=True)
+    x_phys = np.concatenate([[params[0]], phis, Vs, params[2*(nspline-1)+1:]])
     return input_unstandardize(x_phys, param_bounds)
 
+def inverse_prior(x_phys, param_bounds, nspline=4):
+    """ Transform x_phys from physical parameter space back to the unit cube. """
+    x = input_standardize(x_phys, param_bounds)
+    phis = inverse_order_transform(x[1:nspline], reverse=False)
+    Vs = inverse_order_transform(x[nspline:2*(nspline-1) + 1], reverse=True)
+    x_inv = np.concatenate([[x[0]], phis, Vs, x[2*(nspline-1)+1:]])
+    return x_inv
 
 def loglikelihood(x, cobaya_model=None, param_list=None, param_bounds=None, nspline=4):
     x_phys = prior(x, param_bounds, nspline=nspline)
     pdict = dict(zip(param_list, x_phys)) # type: ignore
-    res = cobaya_model.loglike(pdict, make_finite=True, return_derived=False)
+    res = cobaya_model.logpost(pdict, make_finite=True)
     return max(res, -1e5)
 
 
@@ -118,17 +127,43 @@ def solve_bobyqa(x0, raw_func, maxfun, args=(), kwargs=None):
 
 
 def main():
-    if len(sys.argv)<3:
-        print("Usage: python file.py <solver> <maxfun> [nrestart]")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Run the solver with an optional maxfun and optional restarts."
+    )
+    # still a required positional
+    parser.add_argument(
+        'solver',
+        help="Name of the solver to use."
+    )
+    # now flagged options for the others
+    parser.add_argument(
+        '--maxfun',
+        type=int,
+        default=None,
+        help="Maximum number of function evaluations (default: None)."
+    )
+    parser.add_argument(
+        '--nrestart',
+        type=int,
+        default=5,
+        help="Number of restarts (default: 5)."
+    )
 
-    solver, maxfun = sys.argv[1], int(sys.argv[2])
-    nrestart = int(sys.argv[3]) if len(sys.argv)>3 else 5
+    args = parser.parse_args()
 
-    nspline = 5
+    solver = args.solver
+    maxfun = args.maxfun
+    nrestart = args.nrestart
+
+    # your code here...
+    print(f"Solver:   {solver}")
+    print(f"Maxfun:   {maxfun!r}")
+    print(f"Restarts: {nrestart}")
+
+    nspline = 4
     start = time.time()
     log("Loading model...", start)
-    info = yaml_load(f'./spline_{nspline}_vector_cmb_lite.yaml')
+    info = yaml_load(f'./spline_{nspline}_vector_nocmb.yaml')
     # print(info)
 
     cobaya_model = get_model(info)
@@ -138,13 +173,21 @@ def main():
     print(f"Parameter bounds: {param_bounds.T}")
 
     # generate initial x0 in unit cube
-    x0 = Sobol(d=len(param_list)).random(n=32)
+    x0 = Sobol(d=len(param_list)).random(n=16)
     # prev_best = [0.63488053, 0.63698126, 0.85711982, 0.29146541, 0.09060491, 0.78680306,
     #               0.37451744, 0.48230537, 0.42946419]
     # val = loglikelihood(np.array(prev_best), cobaya_model=cobaya_model, param_list=param_list, param_bounds=param_bounds)
     # inits = [prev_best] # Start with a known good point
     # vals = [val]
     inits, vals = [], []
+    prev = {'lengthscale': 0.32242139438167217, 'phi2': 0.11137698872508293, 'phi3': 0.16973729089500852, 'phi4': 0.39999999, 'V2': -0.2150167638013537, 'V3': -0.45262264733115964, 'V4': -0.5038681024318531, 'omch2': 0.11928186771459878, 'ombh2': 0.022796791361644864, 'H0': 67.98015037551522}
+    prev = np.array([prev[k] for k in param_list])
+    prev = inverse_prior(prev, param_bounds, nspline=nspline)
+    print(f"Using previous best point: {prev}")
+    val = loglikelihood(prev, cobaya_model=cobaya_model, param_list=param_list, param_bounds=param_bounds, nspline=nspline)
+    inits.append(prev)
+    vals.append(val)
+    print(f"Using previous best point with loglike = {val:.4f}\n")
     i = 0
     for x in x0:
         val = loglikelihood(x, cobaya_model=cobaya_model, param_list=param_list,
@@ -157,8 +200,8 @@ def main():
             inits.append(x)
             vals.append(val)
             i += 1
-            if i >= 15:  # Limit to 15 initial points
-                break
+            # if i >= 15:  # Limit to 15 initial points
+            #     break
             # break
 
     best_idx = np.argmax(vals)
@@ -197,7 +240,7 @@ def main():
     for k,v in pdict.items(): print(f"{k} = {v:.6f}")
 
     # save
-    fname = f"best_result_{nspline}_{solver}_{maxfun}.txt"
+    fname = f"best_result_{nspline}_{solver}_{maxfun}_baosn.txt"
     old = load_saved_best(fname)
     if old is None or best_f>old:
         save_best(fname, best_f, param_list, best_phys)
