@@ -238,26 +238,12 @@ class QuintessenceSpline(Quintessence):
 
     _fields_ = [
         ("nspline", c_int, "npoints for spline"),
-        # ("phimin", c_double, "minimum field value for spline interpolation"),
-        # ("phimax", c_double, "maximum field value for spline interpolation"),
-        ("phi1", c_double, "nodes for spline interpolation of VofPhi"),
-        ("phi2", c_double, "nodes for spline interpolation of VofPhi"),
-        ("phi3", c_double, "nodes for spline interpolation of VofPhi"),
-        ("phi4", c_double, "nodes for spline interpolation of VofPhi"),
-        # ("phi5", c_double, "nodes for spline interpolation of VofPhi"),
-        # ("phi6", c_double, "nodes for spline interpolation of VofPhi"),
-        ("V1", c_double, "potential V(phi) at nodes"),
-        ("V2", c_double, "potential V(phi) at nodes"),
-        ("V3", c_double, "potential V(phi) at nodes"),
-        ("V4", c_double, "potential V(phi) at nodes"),
-        # ("V5", c_double, "potential V(phi) at nodes"),
-        # ("V6", c_double, "potential V(phi) at nodes"),
+        ("phi_train", AllocatableArrayDouble, "nodes for spline interpolation of VofPhi"),
+        ("V_train", AllocatableArrayDouble, "potential V(phi) at nodes"),
         ("lengthscale", c_double, "length scale for spline interpolation of VofPhi"),
-        # ("do_ordering", c_bool, "if True, order phi and V values before spline interpolation"),
         ("V0", c_double, "Overall potential amplitude "
                         " used for tuning to get correct DE density today"),
         ("theta_i", c_double, "phi_init initial field value"),
-        # ("Vphivals", AllocatableArrayDouble, "potential V(\phi) at nodes"),
         ("frac_lambda0", c_double, "fraction of dark energy in cosmological constant today"),
         # ("use_zc", c_bool, "solve for f, m to get specific critical reshift zc and fde_zc"),
         # ("zc", c_double, "reshift of peak fractional early dark energy density"),
@@ -272,24 +258,15 @@ class QuintessenceSpline(Quintessence):
     ] # type: ignore
     _fortran_class_name_ = 'TQuintessenceSpline'
 
-    def set_params(self, nspline=4, 
-                   phi1=0., phi2=0., phi3=0., phi4=0., #phi5=0., phi6=0., 
-                   V1=1., V2=1., V3=1., V4=1., #V5=1., V6=1.,
-                   lengthscale=1.,
-                   V0=1e-8, theta_i=0.0,frac_lambda0=0.):
+    def set_params(self, nspline=4,phi_train=None, V_train=None, lengthscale=0.1,
+                   V0=1e-8, theta_i=0.0,frac_lambda0=0.,do_ordering=False):
+        if len(phi_train) != len(V_train):
+            raise ValueError("phi_train and V_train must have the same length")
+        if len(phi_train) != nspline:
+            raise ValueError("phi_train and V_train must have length equal to nspline")
         self.nspline = nspline
-        self.phi1 = phi1
-        self.phi2 = phi2
-        self.phi3 = phi3
-        self.phi4 = phi4
-        # self.phi5 = phi5
-        # self.phi6 = phi6
-        self.V1 = V1
-        self.V2 = V2
-        self.V3 = V3
-        self.V4 = V4
-        # self.V5 = V5
-        # self.V6 = V6
+        self.phi_train = np.ascontiguousarray(phi_train, dtype=np.float64)
+        self.V_train = np.ascontiguousarray(V_train, dtype=np.float64)
         self.lengthscale = lengthscale
         self.V0 = V0
         self.theta_i = theta_i
@@ -297,24 +274,30 @@ class QuintessenceSpline(Quintessence):
         self.frac_lambda0 = frac_lambda0
         # self.use_zc = use_zc
 
-        # if do_order_transform:
-            # V = np.array([V2, V3, V4])
-        # phi = np.array([phi2, phi3, phi4])
-        # phis = order_transform(phi)
-        # self.phi2 = phis[0]
-        # self.phi3 = phis[1]
-        # self.phi4 = phis[2]
-            # Vs = order_transform(V)
-            # self.V2 = Vs[0]
-            # self.V3 = Vs[1]
-            # self.V4 = Vs[2]            
-        # else:
-        #     self.phi2 = phi2
-        #     self.phi3 = phi3
-        #     self.phi4 = phi4
-        #     # self.V2 = V2
-        #     # self.V3 = V3
-        #     # self.V4 = V4
+    #     if do_ordering:
+    #         self.order_transform()
+
+    # def order_transform(self,phi_train,V_train,phimin=0.,phimax=0.4,Vmin=-2.,Vmax=0.):
+    #     free_phis = np.array([self.phi2, self.phi3])
+    #     n = np.size(free_phis, axis=-1)
+    #     index = np.arange(n)
+    #     inner_term = np.power(1 - free_phis, 1/(n - index))
+    #     free_phis = 1 - np.cumprod(inner_term, axis=-1)
+    #     free_phis = free_phis * (phimax - phimin) + phimin
+
+    #     free_Vs = np.array([self.V2, self.V3, self.V4])
+    #     n = np.size(free_Vs, axis=-1)
+    #     index = np.arange(n)
+    #     inner_term = np.power(1 - free_Vs, 1/(n - index))
+    #     free_Vs = 1 - np.cumprod(inner_term, axis=-1)
+    #     free_Vs = free_Vs * (Vmax - Vmin) + Vmin
+
+    #     self.phi2 = free_phis[0]
+    #     self.phi3 = free_phis[1]
+    #     self.V2 = free_Vs[0]
+    #     self.V3 = free_Vs[1]
+    #     self.V4 = free_Vs[2]
+
 
 # short names for models that support w/wa
 F2003Class._class_names.update({"fluid": DarkEnergyFluid, "ppf": DarkEnergyPPF})
