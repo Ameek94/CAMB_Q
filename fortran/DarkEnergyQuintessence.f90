@@ -811,15 +811,15 @@
 
     !! GP for Log-dV/dphi
 
-    if (phi<0._dl) then
-        ! phi = -phi
-        Vout = 0.0_dl
-        return
-        ! Reflect potential around phi=0
-        ! logV  = this%gp%V(-phi)      ! = ln V(phi)
-        ! dlogV  = this%gp%Vd(-phi)     ! = d/dphi [ln V(phi)]
-        ! ddlogV = this%gp%Vdd(-phi)
-    end if
+    ! if (phi<0._dl) then
+    !     ! phi = -phi
+    !     Vout = 0.0_dl
+    !     return
+    !     ! Reflect potential around phi=0
+    !     ! logV  = this%gp%V(-phi)      ! = ln V(phi)
+    !     ! dlogV  = this%gp%Vd(-phi)     ! = d/dphi [ln V(phi)]
+    !     ! ddlogV = this%gp%Vdd(-phi)
+    ! end if
 
     ! GP for Log-Potential
     ! Evaluate log-potential GP and its derivatives:

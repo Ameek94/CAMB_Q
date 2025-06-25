@@ -73,7 +73,7 @@ def prior(x, param_bounds, nspline=4):
 
 def loglikelihood(x, cobaya_model=None, param_list=None, param_bounds=None):
     x_phys = prior(x, param_bounds)
-    pdict = dict(zip(param_list, x_phys))
+    pdict = dict(zip(param_list, x_phys)) # type: ignore
     res = cobaya_model.loglike(pdict, make_finite=True, return_derived=False)
     return max(res, -1e5)
 

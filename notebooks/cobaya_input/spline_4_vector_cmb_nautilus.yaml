@@ -47,9 +47,16 @@ params:
     proposal: 0.01
     latex: \phi_3
     drop: True
+  phi4:
+    prior:
+      min: 0.
+      max: 0.4
+    proposal: 0.01
+    latex: \phi_4
+    drop: True
   V2:
     prior:
-      min: -0.75
+      min: -1.
       max: 0.
     # ref:
     #   dist: norm
@@ -60,28 +67,20 @@ params:
     drop: True
   V3:
     prior:
-      min: -0.75
+      min: -1.
       max: 0.
-    # ref:
-    #   dist: norm
-    #   loc: 0.773830
-    #   scale: 0.05
     proposal: 0.01
     latex: V_3
     drop: True
   V4:
     prior:
-      min: -0.75
+      min: -1.
       max: 0.
-    # ref:
-    #   dist: norm
-    #   loc: 0.940659
-    #   scale: 0.05
     proposal: 0.01
     latex: V_4
     drop: True
   phi_train:
-    value: 'lambda phi2, phi3: [0.,phi2, phi3,0.4]'
+    value: 'lambda phi2, phi3, phi4: [0.,phi2, phi3,phi4]'
     derived: false
   V_train:
     value: 'lambda V2, V3, V4: [0.,V2, V3, V4]'

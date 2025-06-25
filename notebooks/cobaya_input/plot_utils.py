@@ -49,10 +49,10 @@ def plot_spline_quintessence(param_dict,
     camb.set_feedback_level(level=0)
 
     # baseline LCDM
-    ombh2          = 0.0223828
-    omch2          = 0.1201075
+    ombh2          = 0.0222246 # 0.0223828 #
+    omch2          =  0.118708 # 0.1201075 #
     omk            = 0.
-    hubble         = 67.32117
+    hubble         = 67.6835 # 67.32117 #
     pars_lcdm = camb.set_params(ombh2=ombh2, omch2=omch2, H0=hubble, dark_energy_model='fluid')
     results_lcdm = camb.get_results(pars_lcdm)
     cl_lcdm = results_lcdm.get_lensed_scalar_cls(CMB_unit='muK')
@@ -138,7 +138,7 @@ def plot_spline_quintessence(param_dict,
     print(f'Quintessence wde at z=0 = {w_spline[0,1]:.6f}')
     w_lcdm   = np.array(results_lcdm.get_dark_energy_rho_w(1/(1+zs))).T
     ax2[0].plot(zs, w_spline[:,1], label='Spline')
-    ax2[0].plot(zs, w_lcdm[:,1], color='k', ls='-.', label='LCDM')
+    ax2[0].plot(zs, w_lcdm[:,1], color='k', ls='-.')#, label='LCDM')
 
     # observational w(z)
     wz_m = np.loadtxt(wz_median_file, delimiter=',')
@@ -153,10 +153,12 @@ def plot_spline_quintessence(param_dict,
     ax2[0].legend()
 
     # H(z)
-    hz_lcdm = np.array(results_lcdm.h_of_z(zs)) / H0
-    hz_spline = np.array(results_spline.h_of_z(zs)) / H0
+    h0_lcdm = hubble
+    h0_spline = param_dict['H0']
+    hz_lcdm = np.array(results_lcdm.h_of_z(zs)) / h0_lcdm
+    hz_spline = np.array(results_spline.h_of_z(zs)) / h0_spline
     ax2[1].plot(zs, hz_spline / hz_lcdm, lw=1.5, label='Spline')
-    ax2[1].axhline(1.0, ls='-.', color='k', label='LCDM')
+    ax2[1].axhline(1.0, ls='-.', color='k',)# label='LCDM')
     hz_m = np.loadtxt(hz_median_file, delimiter=',')
     hz_ul = np.loadtxt(hz_ul_file, delimiter=',')
     hz_ll = np.loadtxt(hz_ll_file, delimiter=',')
@@ -165,7 +167,7 @@ def plot_spline_quintessence(param_dict,
     f_hll = UnivariateSpline(hz_ll[:,0], hz_ll[:,1], s=0)
     ax2[1].plot(zs, f_hm(zs), color='C1', label='DESI+Union3')
     ax2[1].fill_between(zs, f_hul(zs), f_hll(zs), alpha=0.2)
-    ax2[1].legend()
+    # ax2[1].legend()
 
     fig2.savefig(f'{output_prefix}_wz_Hz_{nspline}.pdf', bbox_inches='tight')
     plt.close(fig2)

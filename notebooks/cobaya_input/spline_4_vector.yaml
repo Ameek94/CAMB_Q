@@ -162,7 +162,7 @@ params:
     #   scale: 0.006
     # proposal: 0.003
   mnu: 0.06
-  # A_planck: 1.
+  A_planck: 1.
 sampler:
   # mcmc:
   #   drag: false

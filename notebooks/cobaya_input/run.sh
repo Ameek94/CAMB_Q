@@ -8,7 +8,7 @@
 
 # cobaya-run spline_4_free_minimize.yaml
 
-export OMP_NUM_THREADS=8
+# export OMP_NUM_THREADS=8
 
 python minimize_spline.py bobyqa 250 25
 

@@ -10,58 +10,56 @@ import warnings
 warnings.filterwarnings("ignore")
 from mpi4py.futures import MPIPoolExecutor
 
-# from loglike import cobaya_loglike
-
-
 def order_transform(unit_x, low=0., high=1., reverse=False):
-    """
-    Transform the input vector x to a new order.
-    If reverse is True, it will reverse the order of the elements.
-    """
     n = np.size(unit_x, axis=-1)
-    index = np.arange(n)
-    inner_term = np.power(1 - unit_x, 1/(n - index))
-    unit_y = 1 - np.cumprod(inner_term, axis=-1)
+    idx = np.arange(n)
+    term = np.power(1 - unit_x, 1/(n - idx))
+    y = 1 - np.cumprod(term, axis=-1)
     if reverse:
-        unit_y =  unit_y[::-1]
-    return unit_y * (high - low) + low
+        y = y[::-1]
+    return y * (high - low) + low
 
-def input_standardize(x,param_bounds):
-    """
-    Project from original domain to unit hypercube, X is N x d shaped, param_bounds are 2 x d
-    """
-    x =  (x - param_bounds[0])/(param_bounds[1] - param_bounds[0])
-    return x
 
-def input_unstandardize(x,param_bounds):
-    """
-    Project from unit hypercube to original domain, X is N x d shaped, param_bounds are 2 x d
-    """
-    x = x * (param_bounds[1] - param_bounds[0]) + param_bounds[0]
-    return x
+def inverse_order_transform(unit_y, low=0., high=1., reverse=False):
+    if reverse:
+        unit_y = unit_y[::-1]
+    n = np.size(unit_y, axis=-1)
+    idx = np.arange(n)
+    shifted = np.roll(unit_y, 1)
+    shifted[0] = 0
+    x = 1 - np.power((1 - unit_y)/(1 - shifted), n - idx)
+    return x * (high - low) + low
 
-def prior(x,param_bounds,nspline=4):
+
+def input_standardize(x, param_bounds):
+    return (x - param_bounds[0])/(param_bounds[1] - param_bounds[0])
+
+
+def input_unstandardize(x, param_bounds):
+    return x * (param_bounds[1] - param_bounds[0]) + param_bounds[0]
+
+
+def prior(x, param_bounds, nspline=4):
+    """ Transform the input x in the unit cube to the physical parameter space. """
     params = x.copy()
-    phis = params[1:nspline-1]
-    phis = order_transform(phis,reverse=False)
-    Vs = params[nspline-1: 2*(nspline-1)]
-    # print(f"phis: {phis}, Vs: {Vs}")
-    Vs = order_transform(Vs, reverse=True)
-    x = np.concatenate([[params[0]], phis, Vs, params[2*(nspline - 1):]])
-    return input_unstandardize(x, param_bounds)
+    phis = order_transform(params[1:nspline], reverse=False)
+    Vs = order_transform(params[nspline:2*(nspline-1) + 1], reverse=True)
+    x_phys = np.concatenate([[params[0]], phis, Vs, params[2*(nspline-1)+1:]])
+    return input_unstandardize(x_phys, param_bounds)
 
+def inverse_prior(x_phys, param_bounds, nspline=4):
+    """ Transform x_phys from physical parameter space back to the unit cube. """
+    x = input_standardize(x_phys, param_bounds)
+    phis = inverse_order_transform(x[1:nspline], reverse=False)
+    Vs = inverse_order_transform(x[nspline:2*(nspline-1) + 1], reverse=True)
+    x_inv = np.concatenate([[x[0]], phis, Vs, x[2*(nspline-1)+1:]])
+    return x_inv
 
-def loglikelihood(x,cobaya_model=None,logprior_vol=0.,param_list=[]):
-    param_dict = dict(zip(param_list, x))
-    # try:
-    res = cobaya_model.loglike(param_dict, make_finite=True,return_derived=False,)
-    if res < -1e5:
-        res = -1e5
-    # except:
-        # res = -1e5
-    vals = {k: f'{v:.4f}' for k, v in param_dict.items()}
-    # print(f"Parameters {vals} with loglike {res:.4f}")
-    return res #+ logprior_vol
+def loglikelihood(x, cobaya_model=None, param_list=None, param_bounds=None, nspline=4):
+    x_phys = prior(x, param_bounds, nspline=nspline)
+    pdict = dict(zip(param_list, x_phys)) # type: ignore
+    res = cobaya_model.logpost(pdict, make_finite=True)
+    return max(res, -1e5)
 
 
 def main():
@@ -89,10 +87,10 @@ def main():
 
     prior_kwargs = {'param_bounds': param_bounds, 'nspline': nspline}
     likelihood_kwargs = {'cobaya_model': cobaya_model, 'logprior_vol': logprior_vol,
-                         'param_list': param_list}
+                         'param_list': param_list, 'nspline': nspline}
 
 
-    sampler = Sampler(prior, loglikelihood, ndim, pass_dict=False,filepath=f'spline_quintessence.h5',
+    sampler = Sampler(prior, loglikelihood, ndim, pass_dict=False,filepath=f'spline_quintessence_{nspline}.h5',
                       prior_kwargs=prior_kwargs, likelihood_kwargs=likelihood_kwargs,
                       resume=False,pool=None)
 
