@@ -54,7 +54,9 @@ testfile*
 *.pdf
 .vs
 *.mp4
-
+best*.txt
+phi*.txt
+*.h5
 # Ignore all .dat and .ini files except those already tracked in git
 *.dat
 *.ini
