@@ -7,7 +7,7 @@ from cobaya.yaml import yaml_load
 from cobaya.model import get_model
 import pybobyqa
 import faulthandler; faulthandler.enable()
-
+from plot_utils import plot_spline_quintessence
 
 def log(msg, start_time=None):
     """ Simple logger with elapsed time. """
@@ -173,13 +173,19 @@ def main():
     print(f"Parameter bounds: {param_bounds.T}")
 
     # generate initial x0 in unit cube
-    x0 = Sobol(d=len(param_list)).random(n=64)
+    x0 = Sobol(d=len(param_list)).random(n=128)
     # prev_best = [0.63488053, 0.63698126, 0.85711982, 0.29146541, 0.09060491, 0.78680306,
     #               0.37451744, 0.48230537, 0.42946419]
     # val = loglikelihood(np.array(prev_best), cobaya_model=cobaya_model, param_list=param_list, param_bounds=param_bounds)
     # inits = [prev_best] # Start with a known good point
     # vals = [val]
-    inits, vals = [], []
+    param_dict = {'lengthscale': 0.22918177783573535, 'phi2': 0.09613538020124697, 'phi3': 0.2625646328180616, 'phi4': 0.3975466938054326, 'V2': -0.0716252466727012, 'V3': -0.3463718512754854, 'V4': -0.5370687269945423, 'omch2': 0.11518847279635124, 'ombh2': 0.022278817533921677, 'H0': 66.28831708175498}
+    print('Using initial point from previous best fit: ', param_dict)
+    prev = np.array([param_dict[k] for k in param_list])
+    prev = inverse_prior(prev, param_bounds, nspline=nspline)
+    val = loglikelihood(prev, cobaya_model=cobaya_model, param_list=param_list, param_bounds=param_bounds, nspline=nspline)
+    print(f"Using initial point: {prev} with loglike = {val:.4f} and params = {prior(prev,param_bounds,nspline=nspline)}\n")
+    inits, vals = [prev], [val]
     # prev = {'lengthscale': 0.32242139438167217, 'phi2': 0.11137698872508293, 'phi3': 0.16973729089500852, 'phi4': 0.39999999, 'V2': -0.2150167638013537, 'V3': -0.45262264733115964, 'V4': -0.5038681024318531, 'omch2': 0.11928186771459878, 'ombh2': 0.022796791361644864, 'H0': 67.98015037551522}
     # prev = np.array([prev[k] for k in param_list])
     # prev = inverse_prior(prev, param_bounds, nspline=nspline)
@@ -249,6 +255,9 @@ def main():
         save_best(fname, best_f, param_list, best_phys)
     else:
         log(f"Best {best_f:.6f} <= stored {old:.6f}, not updating.", start)
+
+    plot_spline_quintessence(param_dict=pdict,nspline=nspline)
+
 
 if __name__=='__main__':
     main()
