@@ -143,8 +143,8 @@ params:
   H0:
     latex: H_0
     prior:
-      min: 64
-      max: 70
+      min: 65
+      max: 68
     ref:
       dist: norm
       loc: 66.6

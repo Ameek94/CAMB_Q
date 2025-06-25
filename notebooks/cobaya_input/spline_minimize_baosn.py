@@ -173,26 +173,26 @@ def main():
     print(f"Parameter bounds: {param_bounds.T}")
 
     # generate initial x0 in unit cube
-    x0 = Sobol(d=len(param_list)).random(n=16)
+    x0 = Sobol(d=len(param_list)).random(n=64)
     # prev_best = [0.63488053, 0.63698126, 0.85711982, 0.29146541, 0.09060491, 0.78680306,
     #               0.37451744, 0.48230537, 0.42946419]
     # val = loglikelihood(np.array(prev_best), cobaya_model=cobaya_model, param_list=param_list, param_bounds=param_bounds)
     # inits = [prev_best] # Start with a known good point
     # vals = [val]
     inits, vals = [], []
-    prev = {'lengthscale': 0.32242139438167217, 'phi2': 0.11137698872508293, 'phi3': 0.16973729089500852, 'phi4': 0.39999999, 'V2': -0.2150167638013537, 'V3': -0.45262264733115964, 'V4': -0.5038681024318531, 'omch2': 0.11928186771459878, 'ombh2': 0.022796791361644864, 'H0': 67.98015037551522}
-    prev = np.array([prev[k] for k in param_list])
-    prev = inverse_prior(prev, param_bounds, nspline=nspline)
-    print(f"Using previous best point: {prev}")
-    val = loglikelihood(prev, cobaya_model=cobaya_model, param_list=param_list, param_bounds=param_bounds, nspline=nspline)
-    inits.append(prev)
-    vals.append(val)
-    print(f"Using previous best point with loglike = {val:.4f}\n")
+    # prev = {'lengthscale': 0.32242139438167217, 'phi2': 0.11137698872508293, 'phi3': 0.16973729089500852, 'phi4': 0.39999999, 'V2': -0.2150167638013537, 'V3': -0.45262264733115964, 'V4': -0.5038681024318531, 'omch2': 0.11928186771459878, 'ombh2': 0.022796791361644864, 'H0': 67.98015037551522}
+    # prev = np.array([prev[k] for k in param_list])
+    # prev = inverse_prior(prev, param_bounds, nspline=nspline)
+    # print(f"Using previous best point: {prev}")
+    # val = loglikelihood(prev, cobaya_model=cobaya_model, param_list=param_list, param_bounds=param_bounds, nspline=nspline)
+    # inits.append(prev)
+    # vals.append(val)
+    # print(f"Using previous best point with loglike = {val:.4f}\n")
     i = 0
     for x in x0:
         val = loglikelihood(x, cobaya_model=cobaya_model, param_list=param_list,
                             param_bounds=param_bounds,nspline=nspline)
-        if val > -1e5:
+        if val > -100:
             print(f"Got loglike {val:.4f} for x = {x}\n")
             phys_x = prior(x, param_bounds,nspline=nspline)
             phys_x_dict = {k: f"{float(v):.6f}" for k, v in zip(param_list, phys_x)}
@@ -230,7 +230,10 @@ def main():
             log(f"New best f = {best_f:.6f}", start)
             log(f"Best x = {dict(zip(param_list, prior(best_x,param_bounds,nspline=nspline)))}, start")
 
-        initial_x = best_x.copy()
+        try:
+            initial_x = x0[i] # best_x.copy()
+        except:
+            initial_x = best_x.copy()
 
     # summarize
     best_phys = prior(best_x, param_bounds,nspline=nspline)

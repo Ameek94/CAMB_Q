@@ -63,7 +63,7 @@ vals_dict = {
 pars = camb.set_params(V0= 1e-8,
                        dark_energy_model='QuintessenceSpline',
                        **vals_dict,
-                       phi_train=phi_train, V_train=Vphi_train, nspline=nspline)
+                       phi_train=phi_train, V_train=np.log(Vphi_train), nspline=nspline)
 
 # pars.set_accuracy(AccuracyBoost=4.)
 # camb.model.AccuracyParams(AccuracyBoost=2.,BackgroundTimeStepBoost=2.)
