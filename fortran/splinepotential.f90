@@ -19,6 +19,7 @@ module GaussianPotential
     procedure :: V    => GP_V
     procedure :: Vd   => GP_Vd
     procedure :: Vdd  => GP_Vdd
+    procedure, private :: MLL => GP_MLL
   end type GPotentialRBF_type
 
 contains
@@ -134,6 +135,34 @@ contains
       v2 = v2 + d2k_i*this%alpha(i)
     end do
   end function GP_Vdd
+
+  ! function GP_MLL(this, phi_vals, V_vals, lengthscale) result(ml)
+  !   class(GPotentialRBF_type), intent(in) :: this
+  !   real(wp), intent(in) :: phi_vals(:), V_vals(:)
+  !   real(wp) :: ml
+  !   integer :: i,j
+  !   real(wp), allocatable :: K(:,:), alpha(:)
+
+  !   if (size(phi_vals) /= this%N .or. size(V_vals) /= this%N) then
+  !     error stop 'Input sizes do not match the initialized training data size.'
+  !   end if
+
+  !   allocate(K(this%N,this%N), alpha(this%N))
+  !   do i=1,this%N
+  !     do j=1,this%N
+  !       K(i,j) = this%variance*exp(-0.5_wp*(phi_vals(i)-phi_vals(j))**2/this%length_scale**2)
+  !     end do
+  !     K(i,i) = K(i,i) + this%noise**2
+  !   end do
+
+  !   call solve_linear_system(K, V_vals - this%prior_mean, this%N)
+
+  !   alpha = V_vals - this%prior_mean
+  !   ml = -0.5_wp * dot_product(alpha, V_vals - this%prior_mean) &
+  !        - 0.5_wp * log(det(K)) - 0.5_wp * this%N * log(2.0_wp * pi)
+
+  !   deallocate(K, alpha)
+  ! end function GP_MLL
 
 end module GaussianPotential
 

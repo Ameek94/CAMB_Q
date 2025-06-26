@@ -45,10 +45,10 @@ scales = 1/(1+zs)
 fig,ax = plt.subplots(1,2,figsize=(15,4),layout='constrained')
 
 
-ombh2          = 0.0223828
-omch2          = 0.1201075
+ombh2          = 0.0222246 # 0.0223828 #
+omch2          =  0.118708 # 0.1201075 #
 omk            = 0.
-hubble         = 67.32117
+hubble         = 67.6835 # 67.32117 #
 camb.set_feedback_level(level=0)
 pars = camb.set_params( ombh2=ombh2, omch2=omch2, H0=hubble,dark_energy_model='fluid')
 results_LCDM = camb.get_results(pars)

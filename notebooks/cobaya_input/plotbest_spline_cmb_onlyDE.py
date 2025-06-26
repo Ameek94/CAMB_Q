@@ -87,10 +87,10 @@ ax[2,0].set_xlabel(r'$z$')
 ax[2,1].set_xlabel(r'$z$')
 ax[2,1].set_ylabel(r'$\dot{\phi}$')
 
-ombh2          = 0.0223828 # 
-omch2          = 0.1201075 #
+ombh2          = 0.0223828
+omch2          = 0.1201075
 omk            = 0.
-hubble         = 67.32117 # 67.6835
+hubble         = 67.32117
 
 camb.set_feedback_level(level=0)
 pars = camb.set_params( ombh2=ombh2, omch2=omch2, H0=hubble,dark_energy_model='fluid')
@@ -111,14 +111,26 @@ nspline = 4
 # omch2 = 0.122605
 # ombh2 = 0.021789
 # H0 = 65.654470
-# phi_train = [phi2, phi3,phi4]
+
+
+# lengthscale = 0.166174
+# phi2 = 0.004476
+# phi3 = 0.033120
+# V2 = -0.571374
+# V3 = -0.582088
+# V4 = -0.586390
+# omch2 = 0.118136
+# ombh2 = 0.022508
+# H0 = 68.201627
+# A_planck = 1.004644
+# phi_train = [phi2, phi3,0.4]
 # V_train = [V2, V3, V4]
 
+# New best f = -529.891568#
+param_dict = {'lengthscale': 0.12355662277088068, 'phi2': 0.031273811689154205, 'phi3': 0.07194841218673072,
+            'phi4': 0.309353405958082, 'V2': -0.3185387075578787, 'V3': -0.5969975321711233, 'V4': -0.9252732811673691,
+            'H0': 65.2244778896389, 'ombh2': 0.02228, 'omch2': 0.1182}
 # param_dict = {'lengthscale': 0.3505253387749452, 'phi2': 0.15554633610320867, 'phi3': 0.24469561044753646, 'phi4': 0.3963848159429807, 'V2': -0.21592341134816806, 'V3': -0.4162189753600877, 'V4': -0.5303014860292089, 'omch2': 0.1205240492254077, 'ombh2': 0.02248387903932483, 'H0': 65.85170246559673}
-
-param_dict = {'lengthscale': 0.22918177783573535, 'phi2': 0.09613538020124697, 'phi3': 0.2625646328180616, 'phi4': 0.3975466938054326, 'V2': -0.0716252466727012, 'V3': -0.3463718512754854, 'V4': -0.5370687269945423, 'omch2': 0.11518847279635124, 'ombh2': 0.022278817533921677, 'H0': 66.28831708175498}
-
-
 phi_train = [param_dict['phi'+str(i)] for i in range(2,nspline+1)]
 V_train = [param_dict['V'+str(i)] for i in range(2,nspline+1)]
 phi_train = np.concatenate([[0.],phi_train])
@@ -127,14 +139,13 @@ V_train = np.concatenate([[0.],V_train])
 print(f"phi train = {phi_train}")
 print(f"V train = {V_train}")
 
-
 # for key in param_dict:
 # #     param_dict[key] = float(param_dict[key])
 
 # print(f'Using best fit parameters: {param_dict}')
 
 keys = ['lengthscale', 'ombh2', 'omch2', 'H0']
-vals_dict = dict(zip(keys, [param_dict[key] for key in keys]))
+vals_dict = {key: param_dict[key] for key in keys}
 
 camb.set_feedback_level(level=2)
 pars = camb.set_params(V0= 1e-8,
@@ -190,7 +201,7 @@ ax[0,0].legend()
 # ax[1,0].legend()
 fig.suptitle(f'Spline Quintessence, n = {nspline}')
 # fig.tight_layout()
-plt.savefig(f'SplineQ_{nspline}_summary_nocmb.pdf',bbox_inches='tight')
+plt.savefig(f'SplineQ_{nspline}_summary_cmb.pdf',bbox_inches='tight')
 # plt.show()
 
 fig,ax = plt.subplots(1,2,figsize=(15,4),layout='constrained')
@@ -233,4 +244,4 @@ ax[1].plot(zs,f_m(zs),color='C1',label=r'DESI+Union3')
 ax[1].fill_between(zs,f_ul(zs),f_ll(zs),alpha=0.2,color='C1')
 
 
-plt.savefig(f'SplineQ_wz_Hz_{nspline}_nocmb.pdf',bbox_inches='tight')
+plt.savefig(f'SplineQ_wz_Hz_{nspline}_cmb.pdf',bbox_inches='tight')

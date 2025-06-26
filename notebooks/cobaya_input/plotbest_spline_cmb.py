@@ -113,22 +113,24 @@ nspline = 4
 # H0 = 65.654470
 
 
-lengthscale = 0.166174
-phi2 = 0.004476
-phi3 = 0.033120
-V2 = -0.571374
-V3 = -0.582088
-V4 = -0.586390
-omch2 = 0.118136
-ombh2 = 0.022508
-H0 = 68.201627
-A_planck = 1.004644
-phi_train = [phi2, phi3,0.4]
-V_train = [V2, V3, V4]
+# lengthscale = 0.166174
+# phi2 = 0.004476
+# phi3 = 0.033120
+# V2 = -0.571374
+# V3 = -0.582088
+# V4 = -0.586390
+# omch2 = 0.118136
+# ombh2 = 0.022508
+# H0 = 68.201627
+# A_planck = 1.004644
+# phi_train = [phi2, phi3,0.4]
+# V_train = [V2, V3, V4]
 
+# New best f = -529.891568#
+param_dict = {'lengthscale': 0.12355662277088068, 'phi2': 0.031273811689154205, 'phi3': 0.07194841218673072, 'phi4': 0.309353405958082, 'V2': -0.3185387075578787, 'V3': -0.5969975321711233, 'V4': -0.9252732811673691, 'H0': 65.2244778896389}
 # param_dict = {'lengthscale': 0.3505253387749452, 'phi2': 0.15554633610320867, 'phi3': 0.24469561044753646, 'phi4': 0.3963848159429807, 'V2': -0.21592341134816806, 'V3': -0.4162189753600877, 'V4': -0.5303014860292089, 'omch2': 0.1205240492254077, 'ombh2': 0.02248387903932483, 'H0': 65.85170246559673}
-# phi_train = [param_dict['phi'+str(i)] for i in range(2,nspline+1)]
-# V_train = [param_dict['V'+str(i)] for i in range(2,nspline+1)]
+phi_train = [param_dict['phi'+str(i)] for i in range(2,nspline+1)]
+V_train = [param_dict['V'+str(i)] for i in range(2,nspline+1)]
 phi_train = np.concatenate([[0.],phi_train])
 V_train = np.concatenate([[0.],V_train])
 
@@ -141,7 +143,7 @@ print(f"V train = {V_train}")
 # print(f'Using best fit parameters: {param_dict}')
 
 keys = ['lengthscale', 'ombh2', 'omch2', 'H0']
-vals_dict = {'H0': H0, 'lengthscale': lengthscale, 'ombh2': ombh2, 'omch2': omch2} #dict(zip(keys, [param_dict[key] for key in keys]))
+vals_dict = {key: param_dict[key] for key in keys}
 
 camb.set_feedback_level(level=2)
 pars = camb.set_params(V0= 1e-8,

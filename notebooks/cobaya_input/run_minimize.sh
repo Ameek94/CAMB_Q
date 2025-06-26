@@ -2,16 +2,16 @@
 ###
 ###
 #job name
-#SBATCH --job-name=spline_u3
+#SBATCH --job-name=splmin_u3
 #job stdout file
-#SBATCH --output=spline_u3.out
+#SBATCH --output=splmin_u3.out
 #job stderr file
-#SBATCH --error=spline_u3.err
+#SBATCH --error=splmin_u3.err
 #maximum job time in D-HH:MM
 #SBATCH --time=2-23:59
 #SBATCH --account=scw2169
 #number of parallel processes (tasks) you are requesting - maps to MPI processes
-#SBATCH --ntasks=4
+#SBATCH --ntasks=8
 #SBATCH --cpus-per-task=8
 #memory per process in MB
 #SBATCH --mem-per-cpu=8192
@@ -30,9 +30,9 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 srun --mpi=pmix \
      --ntasks=$SLURM_NTASKS \
      --cpus-per-task=$SLURM_CPUS_PER_TASK \
-     cobaya-run spline_4_vector_cmb_all_mcmc.yaml -r
+     python parallel_minimize_spline_planck_lite.py bobyqa --maxfun 500 --nrestart 5
 
 # srun --mpi=pmix \
 #      --ntasks=$SLURM_NTASKS \
 #      --cpus-per-task=$SLURM_CPUS_PER_TASK \
-#      cobaya-run spline_4_free_minimize.yaml
+#      python parallel_minimize_spline.py bobyqa 5000
