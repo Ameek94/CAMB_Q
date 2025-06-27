@@ -10,9 +10,13 @@
 
 # export OMP_NUM_THREADS=8
 
-python spline_minimize_only_DE.py bobyqa --maxfun 500 --nrestart 4
+cobaya-run Planck_lite_BAO_SN_CPL.yaml
 
-python spline_minimize_only_DE.py scipy --maxfun 500 --nrestart 4
+cobaya-run Planck_lite_BAO_SN_LCDM.yaml
+
+# python spline_minimize_only_DE.py bobyqa --maxfun 500 --nrestart 4
+
+# python spline_minimize_only_DE.py scipy --maxfun 500 --nrestart 4
 
 # python minimize_spline.py bobyqa 250 25
 
