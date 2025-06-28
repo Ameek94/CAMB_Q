@@ -12,6 +12,39 @@
 
     contains
 
+    function Integrate_Trapz(obj,fin,a,b,npoints)
+    use iso_c_binding
+    use MiscUtils
+    use config, only : global_error_flag
+    class(*) :: obj
+    real(dl), external :: fin !a class function
+    procedure(obj_function), pointer :: f
+    real(dl), intent(in) :: a,b
+    integer, intent(in) :: npoints
+    integer :: i
+    real(dl) :: range
+    real(dl) :: x(npoints), y(npoints)
+    real(dl) :: Integrate_Trapz
+
+    call C_F_PROCPOINTER(c_funloc(fin), f)
+
+    Integrate_Trapz = -1
+
+    ! build array from a,b,dx
+
+    range = b-a
+
+    do i=1,npoints
+        x(i) = a + (i-1)*range/(npoints - 1)
+        y(i) = f(obj,x(i))
+    end do
+
+    associate(n => size(x))
+      Integrate_Trapz = sum((y(1+1:n-0) + y(1+0:n-1))*(x(1+1:n-0) - x(1+0:n-1)))/2
+    end associate
+
+    end function Integrate_Trapz
+
     function Integrate_Romberg(obj, fin, a, b, tol, maxit, minsteps, abs_tol)
     !  Rombint returns the integral from a to b of f(obj,x) using Romberg integration.
     !  The method converges provided that f is continuous in (a,b).

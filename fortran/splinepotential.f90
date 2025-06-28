@@ -2,34 +2,40 @@ module GaussianPotential
   ! Gaussian-process RBF Kernel potential implementation in Fortran
   ! Self-contained linear solver replacing external LAPACK
   use, intrinsic :: iso_fortran_env, only: wp => real64
+  ! use MathUtils, only :: Integrate_Trapz, Integrate_Romberg
   implicit none
   private
-  public :: GPotentialRBF_type
+  public :: GP_logVprime_RBF_type
 
-  type :: GPotentialRBF_type
+  type :: GP_logVprime_RBF_type
     integer :: N = 0
     real(wp), allocatable :: phi_train(:)
     real(wp), allocatable :: alpha(:)
-    real(wp) :: length_scale = 0.5_wp
+    real(wp) :: length_scale = 0.1_wp
     real(wp) :: prior_mean   = 0.0_wp
     real(wp) :: variance     = 1.0_wp
     real(wp) :: noise        = 1e-6_wp
+    real(wp) :: phi_star = 0.4_wp ! Last phi value used for prediction
+    real(wp) :: V_star = 1.0_wp ! Last V value used for prediction
   contains
     procedure :: init => GP_init
+    procedure :: GP_predict
+    procedure :: GP_predict_derivative
     procedure :: V    => GP_V
     procedure :: Vd   => GP_Vd
     procedure :: Vdd  => GP_Vdd
-    procedure, private :: MLL => GP_MLL
-  end type GPotentialRBF_type
+    ! procedure, private :: MLL => GP_MLL
+  end type GP_logVprime_RBF_type
 
 contains
 
   subroutine GP_init(this, phi_vals, V_vals, ls, prior_mean, var, noise_in)
-    class(GPotentialRBF_type), intent(inout) :: this
+    class(GP_logVprime_RBF_type), intent(inout) :: this
     real(wp), intent(in) :: phi_vals(:), V_vals(:)
     real(wp), intent(in), optional :: ls, prior_mean, var, noise_in
     integer :: i,j
     real(wp),allocatable :: K(:,:)
+    real(wp) :: phistar
 
     this%N = size(phi_vals)
     allocate(this%phi_train(this%N), this%alpha(this%N))
@@ -40,6 +46,8 @@ contains
 
     this%phi_train = phi_vals
     this%alpha     = (V_vals - this%prior_mean)
+    this%phi_star = this%phi_train(this%N) ! Initialize with last phi value
+
 
     allocate(K(this%N,this%N))
     do i=1,this%N
@@ -90,54 +98,133 @@ contains
     end do
   end subroutine solve_linear_system
 
-  function GP_V(this,phi_star) result(vout)
-    class(GPotentialRBF_type), intent(in) :: this
-    real(wp), intent(in) :: phi_star
+  function GP_predict(this,phi) result(vout)
+    ! this predicts log(-V') at phi using the Gaussian process
+    class(GP_logVprime_RBF_type), intent(in) :: this
+    real(wp), intent(in) :: phi
     real(wp) :: vout
     integer :: i
     real(wp) :: k_i
 
     vout = this%prior_mean !0.0_wp
     do i=1,this%N
-      k_i = this%variance*exp(-0.5_wp*(phi_star-this%phi_train(i))**2/this%length_scale**2)
+      k_i = this%variance*exp(-0.5_wp*(phi-this%phi_train(i))**2/this%length_scale**2)
       vout = vout + k_i*this%alpha(i)
     end do
-  end function GP_V
 
-  function GP_Vd(this,phi_star) result(v1)
-    class(GPotentialRBF_type), intent(in) :: this
-    real(wp), intent(in) :: phi_star
+  end function GP_predict
+
+  function GP_predict_derivative(this,phi) result(v1)
+    class(GP_logVprime_RBF_type), intent(in) :: this
+    real(wp), intent(in) :: phi
     real(wp) :: v1
     integer :: i
     real(wp) :: x,k_i,dk_i
 
     v1 = 0.0_wp
     do i=1,this%N
-      x   = phi_star - this%phi_train(i)
+      x   = phi - this%phi_train(i)
       k_i = this%variance*exp(-0.5_wp*x**2/this%length_scale**2)
       dk_i= - x/this%length_scale**2 * k_i
       v1 = v1 + dk_i*this%alpha(i)
     end do
+  end function GP_predict_derivative
+
+  function GP_V(this, phi) result(vout)
+    class(GP_logVprime_RBF_type), intent(in) :: this
+    real(wp), intent(in) :: phi
+    real(wp) :: vout
+    integer :: i, n_points
+    real(wp) :: range, dx, x_i, f_old, f_new, integral
+
+    n_points = 200
+
+    ! Initialize
+    vout  = this%V_star
+    range = phi - this%phi_star
+    if (abs(range) < 1.0e-6_wp) return
+
+    ! Precompute step size (always positive) and integration direction
+    dx        = range / real(n_points-1, wp)
+    integral  = 0.0_wp
+
+    ! First point
+    x_i   = this%phi_star
+    f_old = this%Vd(x_i)
+
+    ! Loop over interior & endpoint points:
+    do i = 1, n_points-1
+      x_i   = this%phi_star + dx * real(i, wp) !* sign(1.0_wp, range)
+      f_new = this%Vd(x_i)
+
+      ! Trapezoid between (i-1)->i
+      integral = integral + 0.5_wp * dx * (f_old + f_new)
+
+      f_old = f_new
+    end do
+
+    vout = this%V_star + integral
+  end function GP_V
+
+  function GP_Vd(this,phi) result(vout)
+    class(GP_logVprime_RBF_type), intent(in) :: this
+    real(wp), intent(in) :: phi
+    real(wp) :: vout
+    integer :: i
+    real(wp) :: x,k_i,dk_i
+
+    vout = -exp(this%GP_predict(phi))
+
   end function GP_Vd
 
-  function GP_Vdd(this,phi_star) result(v2)
-    class(GPotentialRBF_type), intent(in) :: this
-    real(wp), intent(in) :: phi_star
+  function GP_Vdd(this,phi) result(v2)
+    class(GP_logVprime_RBF_type), intent(in) :: this
+    real(wp), intent(in) :: phi
     real(wp) :: v2
     integer :: i
     real(wp) :: x,k_i,d2k_i
 
-    v2 = 0.0_wp
-    do i=1,this%N
-      x    = phi_star - this%phi_train(i)
-      k_i  = this%variance*exp(-0.5_wp*x**2/this%length_scale**2)
-      d2k_i= (x**2/this%length_scale**4 - 1.0_wp/this%length_scale**2)*k_i
-      v2 = v2 + d2k_i*this%alpha(i)
-    end do
+    v2 = -this%GP_predict_derivative(phi) * exp(this%GP_predict(phi))
+
   end function GP_Vdd
 
+
+
+
+  ! function GP_Vd(this,phi_star) result(v1)
+  !   class(GP_logVprime_RBF_type), intent(in) :: this
+  !   real(wp), intent(in) :: phi_star
+  !   real(wp) :: v1
+  !   integer :: i
+  !   real(wp) :: x,k_i,dk_i
+
+  !   v1 = 0.0_wp
+  !   do i=1,this%N
+  !     x   = phi_star - this%phi_train(i)
+  !     k_i = this%variance*exp(-0.5_wp*x**2/this%length_scale**2)
+  !     dk_i= - x/this%length_scale**2 * k_i
+  !     v1 = v1 + dk_i*this%alpha(i)
+  !   end do
+  ! end function GP_Vd
+
+  ! function GP_Vdd(this,phi_star) result(v2)
+  !   class(GP_logVprime_RBF_type), intent(in) :: this
+  !   real(wp), intent(in) :: phi_star
+  !   real(wp) :: v2
+  !   integer :: i
+  !   real(wp) :: x,k_i,d2k_i
+
+  !   v2 = 0.0_wp
+  !   do i=1,this%N
+  !     x    = phi_star - this%phi_train(i)
+  !     k_i  = this%variance*exp(-0.5_wp*x**2/this%length_scale**2)
+  !     d2k_i= (x**2/this%length_scale**4 - 1.0_wp/this%length_scale**2)*k_i
+  !     v2 = v2 + d2k_i*this%alpha(i)
+  !   end do
+  ! end function GP_Vdd
+
   ! function GP_MLL(this, phi_vals, V_vals, lengthscale) result(ml)
-  !   class(GPotentialRBF_type), intent(in) :: this
+  !   class(GP_logVprime_RBF_type), intent(in) :: this
   !   real(wp), intent(in) :: phi_vals(:), V_vals(:)
   !   real(wp) :: ml
   !   integer :: i,j
@@ -171,7 +258,7 @@ end module GaussianPotential
 !   use GaussianPotential
 !   use, intrinsic :: iso_fortran_env, only: wp => real64
 !   implicit none
-!   type(GPotentialRBF_type) :: gp
+!   type(GP_logVprime_RBF_type) :: gp
 !   real(wp), allocatable :: phi_train(:), V_train(:)
 !   real(wp) :: phi_star,v,vd,vdd
 !   integer :: N,i

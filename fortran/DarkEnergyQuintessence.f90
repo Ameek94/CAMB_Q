@@ -96,7 +96,7 @@
         real(dl), dimension(:), allocatable :: fde, ddfde
         real(dl) :: omega_tol = 1d-5 !tolerance for OmegaDE
         real(dl) :: atol = 1e-7_dl
-        type(GPotentialRBF_type) :: gp
+        type(GP_logVprime_RBF_type) :: gp
     contains
     procedure :: Vofphi => TQuintessenceSpline_VofPhi
     procedure :: Init => TQuintessenceSpline_Init
@@ -246,7 +246,7 @@
     class(TQuintessence) :: this
     real(dl) :: phi
 
-    TQuintessence_phidot_start = 1d-10 ! 0.0_dl !
+    TQuintessence_phidot_start =  0.0_dl !1d-10 !
 
     end function TQuintessence_phidot_start
 
@@ -823,17 +823,17 @@
 
     ! GP for Log-Potential
     ! Evaluate log-potential GP and its derivatives:
-    logV  = this%gp%V(phi)      ! = ln V(phi)
-    dlogV  = this%gp%Vd(phi)     ! = d/dphi [ln V(phi)]
-    ddlogV = this%gp%Vdd(phi)    ! = d2/dphi2 [ln V(phi)]
+    ! logV  = this%gp%V(phi)      ! = ln V(phi)
+    ! dlogV  = this%gp%Vd(phi)     ! = d/dphi [ln V(phi)]
+    ! ddlogV = this%gp%Vdd(phi)    ! = d2/dphi2 [ln V(phi)]
 
     select case(deriv)
       case (0)
-        Vout = this%V0 * exp(logV) !
+        Vout = this%gp%V(phi) !this%V0 * exp(logV) !
       case (1)
-        Vout = this%V0 * exp(logV) * dlogV
+        Vout = this%gp%Vd(phi) !this%V0 * exp(logV) * dlogV
       case (2)
-        Vout = this%V0 * exp(logV) *(dlogV + ddlogV**2)  !this%gp%Vdd(phi)       ! calls SplinePotential%Vdd
+        Vout = this%gp%Vdd(phi)  !this%V0 * exp(logV) *(dlogV + ddlogV**2)  !this%gp%Vdd(phi)       ! calls SplinePotential%Vdd
       case default
         stop 'Invalid deriv in spline VofPhi'
       end select
