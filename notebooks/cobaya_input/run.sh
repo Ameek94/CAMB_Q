@@ -1,25 +1,22 @@
 #!/bin/bash
 
-# cobaya-run spline_5.yaml --resume
+# Define the process pattern to search for
+process_pattern="python spline_minimize_varyDEonly_camspec.py" # nautilus_cached_kernel_lownoise.py"
 
-# cobaya-run spline_5.yaml --minimize
+# Capture the PID of the process
+pid=$(pgrep -f "$process_pattern")
 
-# mpirun -n 2 cobaya-run spline_4_free.yaml -r
+if [ -n "$pid" ]; then
+    echo "Process is running with PID: $pid. Waiting for it to finish..."
 
-# cobaya-run spline_4_free_minimize.yaml
+    # Loop until the process is no longer running
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep 1
+    done
 
-# export OMP_NUM_THREADS=8
+    echo "Process with PID $pid has finished."
+else
+    echo "No process found matching '$process_pattern'."
+fi
 
-cobaya-run Planck_lite_BAO_SN_CPL.yaml
-
-cobaya-run Planck_lite_BAO_SN_LCDM.yaml
-
-# python spline_minimize_only_DE.py bobyqa --maxfun 500 --nrestart 4
-
-# python spline_minimize_only_DE.py scipy --maxfun 500 --nrestart 4
-
-# python minimize_spline.py bobyqa 250 25
-
-# python minimize_spline.py scipy 200 10
-
-# python nautilus_spline.py
+python spline_minimize_all_camspec.py bobyqa --maxfun 500 --nrestart 11
