@@ -807,7 +807,7 @@
     real(dl) :: phi
     integer :: deriv
     real(dl) :: Vout
-    real(dl) :: logV, dlogV, ddlogV
+    ! real(dl) :: logV, dlogV, ddlogV
 
     !! GP for Log-dV/dphi
 
@@ -829,11 +829,11 @@
 
     select case(deriv)
       case (0)
-        Vout = this%gp%V(phi) !this%V0 * exp(logV) !
+        Vout = this%V0 * this%gp%V(phi) !this%V0 * exp(logV) !
       case (1)
-        Vout = this%gp%Vd(phi) !this%V0 * exp(logV) * dlogV
+        Vout = this%V0 * this%gp%Vd(phi) !this%V0 * exp(logV) * dlogV
       case (2)
-        Vout = this%gp%Vdd(phi)  !this%V0 * exp(logV) *(dlogV + ddlogV**2)  !this%gp%Vdd(phi)       ! calls SplinePotential%Vdd
+        Vout = this%V0 * this%gp%Vdd(phi)  !this%V0 * exp(logV) *(dlogV + ddlogV**2)  !this%gp%Vdd(phi)       ! calls SplinePotential%Vdd
       case default
         stop 'Invalid deriv in spline VofPhi'
       end select
@@ -867,7 +867,6 @@
     end if
 
     call this%gp%init(this%phi_train,this%V_train,this%lengthscale)
-
 
     ! ! print phi_train, V_train
     ! if (FeedbackLevel > 1) then
