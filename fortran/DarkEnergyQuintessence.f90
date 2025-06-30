@@ -89,13 +89,13 @@
         real(dl), dimension(:), allocatable :: V_train
         real(dl) :: lengthscale = 0.5_dl !length scale for RBF kernel
         real(dl) :: V0 = 1e-8 !m in reduced Planck mass units
-        real(dl) :: theta_i = 0_dl !initial field value
+        real(dl) :: theta_i = 0.0_dl !initial field value
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
-        integer :: npoints = 6000 !baseline number of log a steps; will be increased if needed when there are oscillations
-        integer :: min_steps_per_osc = 2
+        integer :: npoints = 5000 !baseline number of log a steps; will be increased if needed when there are oscillations
+        integer :: min_steps_per_osc = 10
         real(dl), dimension(:), allocatable :: fde, ddfde
         real(dl) :: omega_tol = 1d-5 !tolerance for OmegaDE
-        real(dl) :: atol = 1e-7_dl
+        real(dl) :: atol = 1e-8_dl
         type(GP_logVprime_RBF_type) :: gp
     contains
     procedure :: Vofphi => TQuintessenceSpline_VofPhi
@@ -1204,8 +1204,10 @@
             write(*,*) 'TQuintessenceSpline error in integration'
             write(*,*) 'afrom, aend = ', afrom, aend
             write(*,*) 'V0, theta_i = ', this%V0, this%theta_i
+            write(*,*) 'Error flag = ', global_error_flag
+            write(*,*) 'Error message = ', global_error_message
         end if
-        stop
+        ! stop
         check_errorQ = .false.
         return
     end if
