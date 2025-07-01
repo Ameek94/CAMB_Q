@@ -3,12 +3,12 @@ module GaussianPotential
   ! Self-contained linear solver replacing external LAPACK
   ! use, intrinsic :: iso_fortran_env, only: dl => real64
   use constants
-  ! use MathUtils, only :: Integrate_Trapz, Integrate_Romberg
+  use MathUtils
   implicit none
   private
   public :: GP_logVprime_RBF_type
 
-  integer, parameter :: N_grid = 100
+  integer, parameter :: N_grid = 300
   real(dl), parameter :: PHI_MIN = 0.0_dl, PHI_MAX = 0.5_dl
   real(dl), parameter :: DPHI = (PHI_MAX - PHI_MIN) / real(N_grid-1, dl)
   real(dl), parameter :: INV_DPHI = 1.0_dl / DPHI
@@ -19,31 +19,31 @@ module GaussianPotential
     real(dl), allocatable :: phi_train(:)
     real(dl), allocatable :: alpha(:)
     real(dl) :: length_scale = 0.1_dl
+    real(dl) :: V_star = 0.8260998715675062_dl ! Last V value used for prediction 0.73256704_dl !
     real(dl) :: prior_mean   = 0.0_dl
     real(dl) :: variance     = 1.0_dl
     real(dl) :: noise        = 1e-6_dl
     real(dl) :: phi_star = 0.25_dl ! Last phi value used for prediction
-    real(dl) :: V_star = 0.8260998715675062_dl ! Last V value used for prediction 0.73256704_dl !
     real(dl), allocatable :: phi_grid(:), V_grid(:), Vd_grid(:), Vdd_grid(:)
   contains
     procedure :: init => GP_init
     procedure :: GP_predict
     procedure :: GP_predict_derivative
-    procedure :: V    => GP_V_build
-    procedure :: Vd   => GP_Vd_build
-    procedure :: Vdd  => GP_Vdd_build
-    procedure, private :: GP_V
-    procedure, private :: GP_Vd
-    procedure, private :: GP_Vdd
+    procedure :: V    => GP_V_interp
+    procedure :: Vd   => GP_Vd !GP_Vd_interp !
+    procedure :: Vdd  => GP_Vdd !GP_Vdd ! _interp !
+    procedure :: GP_V
+    procedure :: GP_Vd
+    procedure :: GP_Vdd
     ! procedure, private :: MLL => GP_MLL
   end type GP_logVprime_RBF_type
 
 contains
 
-  subroutine GP_init(this, phi_vals, V_vals, ls, prior_mean, var, noise_in)
+  subroutine GP_init(this, phi_vals, V_vals, ls, V_star, prior_mean, var, noise_in)
     class(GP_logVprime_RBF_type), intent(inout) :: this
     real(dl), intent(in) :: phi_vals(:), V_vals(:)
-    real(dl), intent(in), optional :: ls, prior_mean, var, noise_in
+    real(dl), intent(in), optional :: ls, V_star, prior_mean, var, noise_in
     integer :: i,j
     real(dl),allocatable :: K(:,:)
     real(dl) :: phi_local
@@ -51,6 +51,7 @@ contains
     this%N = size(phi_vals)
     allocate(this%phi_train(this%N), this%alpha(this%N))
     if(present(ls))      this%length_scale = ls
+    if(present(V_star)) this%V_star      = V_star
     if(present(prior_mean)) this%prior_mean = prior_mean
     if(present(var))     this%variance   = var
     if(present(noise_in))this%noise        = noise_in
@@ -71,22 +72,18 @@ contains
     call solve_linear_system(K, this%alpha, this%N)
     deallocate(K)
 
-    ! allocate(this%phi_grid(N_grid),this%V_grid(N_grid), this%Vd_grid(N_grid), this%Vdd_grid(N_grid))
+    allocate(this%phi_grid(N_grid),this%V_grid(N_grid), this%Vd_grid(N_grid), this%Vdd_grid(N_grid))
 
-    ! !!!!! $omp! parallel do default(shared) private(i)
-
-
-    ! do i=1,N_grid
-    !   phi_local = PHI_MIN + real((i-1),dl)*DPHI
-    !   this%phi_grid(i) = phi_local
-    !   this%V_grid(i)   = this%GP_V_build(phi_local)
-    !   this%Vd_grid(i)  = this%GP_Vd_build(phi_local)
-    !   this%Vdd_grid(i) = this%GP_Vdd_build(phi_local)
-    !   write(*, '(A, F8.4, 3(F12.6))') 'GP_init: phi = ', phi_local, this%V_grid(i), this%Vd_grid(i), this%Vdd_grid(i)
-    ! end do
-
-
-    ! !!!!$omp! end parallel do
+    !$omp parallel do default(shared) private(i)
+    do i=1,N_grid
+      phi_local = PHI_MIN + real((i-1),dl)*DPHI
+      this%phi_grid(i) = phi_local
+      this%V_grid(i)   = this%GP_V(phi_local)
+      ! this%Vd_grid(i)  = this%GP_Vd(phi_local)
+      ! this%Vdd_grid(i) = this%GP_Vdd(phi_local)
+      ! write(*, '(A, F8.4, 3(F12.6))') 'GP_init: phi = ', phi_local, this%V_grid(i), this%Vd_grid(i), this%Vdd_grid(i)
+    end do
+    !$omp end parallel do
 
   end subroutine GP_init
 
@@ -129,7 +126,7 @@ contains
 
 
 ! Linear interpolate the V, Vd, and Vdd grids to get values at arbitrary phi
-  function GP_V(this,phi) result(vout)
+  function GP_V_interp(this,phi) result(vout)
     ! this predicts log(-V') at phi using the Gaussian process
     class(GP_logVprime_RBF_type), intent(in) :: this
     real(dl), intent(in) :: phi
@@ -152,9 +149,9 @@ contains
     end if
     t = (phi - (PHI_MIN + (j-1)*DPHI)) * INV_DPHI
     vout =  (1.0_dl - t)*this%V_grid(j) + t*this%V_grid(j+1)
-  end function GP_V
+  end function GP_V_interp
 
-  function GP_Vd(this,phi) result(vout)
+  function GP_Vd_interp(this,phi) result(vout)
     class(GP_logVprime_RBF_type), intent(in) :: this
     real(dl), intent(in) :: phi
     real(dl) :: vout, t
@@ -171,9 +168,9 @@ contains
     j = floor((phi - PHI_MIN) * INV_DPHI) + 1
     t = (phi - (PHI_MIN + (j-1)*DPHI)) * INV_DPHI
     vout = (1.0_dl - t)*this%Vd_grid(j) + t*this%Vd_grid(j+1)
-  end function GP_Vd
+  end function GP_Vd_interp
 
-  function GP_Vdd(this,phi) result(vout)
+  function GP_Vdd_interp(this,phi) result(vout)
     class(GP_logVprime_RBF_type), intent(in) :: this
     real(dl), intent(in) :: phi
     real(dl) :: vout, t
@@ -191,7 +188,7 @@ contains
     t = (phi - (PHI_MIN + (j-1)*DPHI)) * INV_DPHI
     vout = (1.0_dl - t)*this%Vdd_grid(j) + t*this%Vdd_grid(j+1)
 
-  end function GP_Vdd
+  end function GP_Vdd_interp
 
   pure function GP_predict(this,phi) result(vout)
     ! this predicts log(-V') at phi using the Gaussian process
@@ -225,7 +222,7 @@ contains
     end do
   end function GP_predict_derivative
 
-  function GP_V_build(this, phi) result(vout)
+  function GP_V(this, phi) result(vout)
     class(GP_logVprime_RBF_type), intent(in) :: this
     real(dl), intent(in) :: phi
     real(dl) :: vout
@@ -233,50 +230,68 @@ contains
     real(dl) :: range, dx, x_i, f_old, f_new, integral
     ! real(dl), allocatable :: phivals(:), Vvals(:)
 
-    n_points = 40
+    n_points = 100
     vout     = this%V_star
     range    = phi - this%phi_star
-    if (abs(range) < 1.0e-6_dl) return
+    if (abs(range) < 1.0e-8_dl) return
 
-    dx       = range / real(n_points-1, dl)
-    integral = 0.0_dl
+    ! dx       = range / real(n_points-1, dl)
+    ! integral = 0.0_dl
 
-    ! ! vectorized integral
-    ! phivals = this%phi_star + dx * [(real(i, dl), i=0,n_points-1)]
-    ! Vvals = this%Vd(phivals)
+    ! ! ! vectorized integral
+    ! ! phivals = this%phi_star + dx * [(real(i, dl), i=0,n_points-1)]
+    ! ! Vvals = this%Vd(phivals)
 
-    ! integral = dx * (sum(Vvals) - 0.5_dl * (Vvals(1) - Vvals(n_points)) )
+    ! ! integral = dx * (sum(Vvals) - 0.5_dl * (Vvals(1) - Vvals(n_points)) )
 
-    x_i   = this%phi_star
-    f_old = this%Vd(x_i)
-    do i = 1, n_points-1
-      x_i   = this%phi_star + dx * real(i, dl)
-      f_new = this%Vd(x_i)
-      integral = integral + 0.5_dl * dx * (f_old + f_new)
-      f_old = f_new
-    end do
+    ! x_i   = this%phi_star
+    ! f_old = this%Vd(x_i)
+    ! do i = 1, n_points-1
+    !   x_i   = this%phi_star + dx * real(i, dl)
+    !   f_new = this%Vd(x_i)
+    !   integral = integral + 0.5_dl * dx * (f_old + f_new)
+    !   f_old = f_new
+    ! end do
+
+    integral = Integrate_Romberg(this,GP_Vd,this%phi_star, phi,1e-6_dl)
 
     vout = this%V_star + integral
 
-  end function GP_V_build
+  end function GP_V
 
-  pure function GP_Vd_build(this, phi) result(vout)
+  pure function GP_Vd(this, phi) result(vout)
     class(GP_logVprime_RBF_type), intent(in) :: this
     real(dl), intent(in) :: phi
     real(dl) :: vout
 
+    if (phi < PHI_MIN) then
+      vout = 0.0_dl !  this%Vd_grid(1)
+      return
+    elseif (phi > PHI_MAX) then
+      vout = 0.0_dl !this%Vd_grid(N_grid)
+      return
+    end if
+
     ! square-link: GP_predict returns h = sqrt(-V'), so V' = -h^2
     vout = - (this%GP_predict(phi))**2
-  end function GP_Vd_build
+  end function GP_Vd
 
-  pure function GP_Vdd_build(this, phi) result(v2)
+  pure function GP_Vdd(this, phi) result(vout)
     class(GP_logVprime_RBF_type), intent(in) :: this
     real(dl), intent(in) :: phi
-    real(dl) :: v2
+    real(dl) :: vout
+
+    if (phi < PHI_MIN) then
+      vout = 0.0_dl !  this%Vd_grid(1)
+      return
+    elseif (phi > PHI_MAX) then
+      vout = 0.0_dl !this%Vd_grid(N_grid)
+      return
+    end if
 
     ! derivative of Vd: V'' = -2*h * dh/dφ
-    v2 = -2.0_dl * this%GP_predict(phi) * this%GP_predict_derivative(phi)
-  end function GP_Vdd_build
+    vout = -2.0_dl * this%GP_predict(phi) * this%GP_predict_derivative(phi)
+  end function GP_Vdd
 
   ! function GP_V(this, phi) result(vout)
   !   class(GP_logVprime_RBF_type), intent(in) :: this
@@ -346,15 +361,17 @@ end module GaussianPotential
 !   type(GP_logVprime_RBF_type) :: gp
 !   real(dl), allocatable :: phi_vals(:), V_vals(:)
 !   real(dl), dimension(:), allocatable :: phi_test
-!   real(dl) :: Vval, Vdval, Vddval
+!   real(dl) :: Vval, Vdval, Vddval, VVal_i, Vdval_i, Vddval_i, ell
 !   integer :: i
 
 !   ! Example training data
 !   allocate(phi_vals(6), V_vals(6))
 !   phi_vals = [0.0_dl,   0.05_dl, 0.1_dl,  0.15_dl, 0.2_dl,  0.25_dl]
-!   V_vals   = [0.0_dl, 1.16014591_dl, 1.4744805_dl,  1.47873107_dl, 1.18081867_dl, 0.19975953_dl] ![-5.0_dl,  0.29709156_dl,  0.77661145_dl,  0.78236866_dl,  0.33241596_dl, -3.22128196_dl]
+!   V_vals = [1.598219_dl, 0.993386_dl, 0.536813_dl, 0.835658_dl, 1.596751_dl, 0.874355_dl]
+!   ! V_vals   = [0.0_dl, 1.16014591_dl, 1.4744805_dl,  1.47873107_dl, 1.18081867_dl, 0.19975953_dl] ![-5.0_dl,  0.29709156_dl,  0.77661145_dl,  0.78236866_dl,  0.33241596_dl, -3.22128196_dl]
 
-!   call gp%init(phi_vals, V_vals, 0.0735_dl)
+!   ell = 0.058065_dl !
+!   call gp%init(phi_vals, V_vals, ell)
 
 !   ! Test points in [0, 0.25]
 !   allocate(phi_test(6))
@@ -362,10 +379,17 @@ end module GaussianPotential
 
 !   print '(A10, 3(A12))', 'phi', 'V', 'Vd', 'Vdd'
 !   do i = 1, size(phi_test)
-!     Vval   = gp%V(phi_test(i))
-!     Vdval  = gp%Vd(phi_test(i))
-!     Vddval = gp%Vdd(phi_test(i))
+!     Vval_i   = gp%V(phi_test(i))
+!     Vdval_i  = gp%Vd(phi_test(i))
+!     Vddval_i = gp%Vdd(phi_test(i))
+!     Vval    = gp%GP_V(phi_test(i))
+!     Vdval   = gp%GP_Vd(phi_test(i))
+!     Vddval  = gp%GP_Vdd(phi_test(i))
+!     print '(A)', '----------------------------------------'
+!     print '(A)', 'GP full vs interpolated values:'
 !     print '(F8.4, 3(F12.6))', phi_test(i), Vval, Vdval, Vddval
+!     print '(F8.4, 3(F12.6))', phi_test(i), Vval_i, Vdval_i, Vddval_i
+!     print '(A)', '----------------------------------------'
 !   end do
 
 ! end program test_GP

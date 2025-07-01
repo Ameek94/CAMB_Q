@@ -88,6 +88,7 @@
         real(dl), dimension(:), allocatable :: phi_train
         real(dl), dimension(:), allocatable :: V_train
         real(dl) :: lengthscale = 0.5_dl !length scale for RBF kernel
+        real(dl) :: V_star = 0.8260998715675062_dl ! V Value at final training point
         real(dl) :: V0 = 1e-8 !m in reduced Planck mass units
         real(dl) :: theta_i = 0.0_dl !initial field value
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
@@ -866,7 +867,7 @@
         write (*,*) 'Using Phi train and V train values = ', this%phi_train, this%V_train
     end if
 
-    call this%gp%init(this%phi_train,this%V_train,this%lengthscale)
+    call this%gp%init(this%phi_train,this%V_train,this%lengthscale,this%V_star)
 
     ! ! print phi_train, V_train
     ! if (FeedbackLevel > 1) then

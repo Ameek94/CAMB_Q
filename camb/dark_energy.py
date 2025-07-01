@@ -241,6 +241,7 @@ class QuintessenceSpline(Quintessence):
         ("phi_train", AllocatableArrayDouble, "nodes for spline interpolation of VofPhi"),
         ("V_train", AllocatableArrayDouble, "potential V(phi) at nodes"),
         ("lengthscale", c_double, "length scale for spline interpolation of VofPhi"),
+        ("V_star", c_double, "VofPhi at final training point, used for prediction"),
         ("V0", c_double, "Overall potential amplitude "
                         " used for tuning to get correct DE density today"),
         ("theta_i", c_double, "phi_init initial field value"),
@@ -258,7 +259,7 @@ class QuintessenceSpline(Quintessence):
     ] # type: ignore
     _fortran_class_name_ = 'TQuintessenceSpline'
 
-    def set_params(self, nspline=4,phi_train=None, V_train=None, lengthscale=0.1,
+    def set_params(self, nspline=4,phi_train=None, V_train=None, lengthscale=0.1,V_star=0.8260998715675062,
                    V0=1e-8, theta_i=0.0,frac_lambda0=0.,do_ordering=False):
         if len(phi_train) != len(V_train):
             raise ValueError("phi_train and V_train must have the same length")
@@ -268,6 +269,7 @@ class QuintessenceSpline(Quintessence):
         self.phi_train = np.ascontiguousarray(phi_train, dtype=np.float64)
         self.V_train = np.ascontiguousarray(V_train, dtype=np.float64)
         self.lengthscale = lengthscale
+        self.V_star = V_star
         self.V0 = V0
         self.theta_i = theta_i
         # self.do_ordering = do_ordering
