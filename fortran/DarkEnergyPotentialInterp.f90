@@ -55,7 +55,7 @@ contains
     this%x_data = x_in
     this%y_data = y_in
 
-    write (*,*) 'Interpolator initialized with ', n, ' points from ', this%x_data(1), ' to ', this%x_data(n)
+    ! write (*,*) 'Interpolator initialized with ', n, ' points from ', this%x_data(1), ' to ', this%x_data(n)
   end subroutine init_method
 
   ! ---------------------------------------------------------------------------

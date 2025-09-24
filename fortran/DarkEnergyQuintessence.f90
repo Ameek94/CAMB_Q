@@ -843,7 +843,7 @@
     call this%dV_interpolator%init(this%phi_train,this%dV_train)
     call this%ddV_interpolator%init(this%phi_train,this%ddV_train)
 
-    ! write(*,*) 'Initialized Quintessence interpolation with points from ', this%phi_train(1), ' to ', this%phi_train(this%V_interpolator%npoints)
+    if (FeedbackLevel > 0) write(*,*) 'Initialized Quintessence interpolation with', size(this%phi_train), 'points from ', this%phi_train(1), ' to ', this%phi_train(size(this%phi_train))
 
     !Make interpolation table, etc,
     !At this point massive neutrinos have been initialized
@@ -871,10 +871,10 @@
     initial_phidot =  astart*this%phidot_start(initial_phi)
     om1= this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
     V0_input = this%V0
-    if (FeedbackLevel > 0) write (*,*) 'checking if need to adjust input V0 = ',this%V0
+    if (FeedbackLevel > 1) write (*,*) 'checking if need to adjust input V0 = ',this%V0
     if (FeedbackLevel > 0) write(*,*) 'Omega_DE from scalar field IC = ',om1
-    if (FeedbackLevel > 0) write(*,*) 'Omega_DE tolerance = ',this%omega_tol
-    if (FeedbackLevel > 0) write(*,*) 'Omega_DE required = ',this%State%Omega_de
+    if (FeedbackLevel > 1) write(*,*) 'Omega_DE tolerance = ',this%omega_tol
+    if (FeedbackLevel > 9) write(*,*) 'Omega_DE required = ',this%State%Omega_de
 
     ! --------------- method 2 for initial conditions tuning V0 using Binary search ------------------------------
     ! this%V0 = 1d-6
@@ -926,7 +926,7 @@
         end do !iterations
 
         if (FeedbackLevel > 0) write(*,*) 'Search for new V0, converged = ',OK
-        if (FeedbackLevel > 1) write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
+        if (FeedbackLevel > 0) write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
         if (FeedbackLevel > 1) write (*,'(A, ES10.2)') 'new V0 from binary search = ',this%V0
         if (FeedbackLevel > 1) write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1
 
