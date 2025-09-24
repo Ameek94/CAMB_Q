@@ -105,36 +105,9 @@
 
     end type TQuintessenceModel
 
-    type, extends(TQuintessence) :: TQuintessenceGP ! Quintessence with Gaussian Process potential
-        real(dl) :: nodes(:), vals(:)
-        real(dl) :: V0 = 1e-7 !m in reduced Planck mass units
-        real(dl) :: theta_i = 0_dl !initial field value
-        real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
-        ! logical :: use_zc = .false. !adjust m to fit zc
-        ! real(dl) :: zc, fde_zc !redshift for peak f_de and f_de at that redshift
-        integer :: npoints = 6000 !baseline number of log a steps; will be increased if needed when there are oscillations
-        integer :: min_steps_per_osc = 10
-        integer :: model_idx = 1 ! which quintessence model (VofPhi) to use
-        real(dl), dimension(:), allocatable :: fde, ddfde
-        real(dl) :: omega_tol = 1d-5 !tolerance for OmegaDE
-        real(dl) :: atol = 1e-8_dl
-    contains
-    procedure :: Vofphi => TQuintessenceModel_VofPhi
-    procedure :: Init => TQuintessenceModel_Init
-    procedure :: ReadParams =>  TQuintessenceModel_ReadParams
-    procedure, nopass :: PythonClass => TQuintessenceModel_PythonClass
-    procedure, nopass :: SelfPointer => TQuintessenceModel_SelfPointer
-    ! procedure, private :: fdeAtaQ
-    ! procedure, private :: fde_peakQ
-    procedure, private :: check_errorQ
-    ! procedure :: calc_zc_fdeQ
-
-    end type TQuintessenceModel
-
-
     procedure(TClassDverk) :: dverk
 
-    public TQuintessence, TEarlyQuintessence,TQuintessenceModel, TQuintessenceGP
+    public TQuintessence, TEarlyQuintessence,TQuintessenceModel
     contains
 
     function VofPhi(this, phi, deriv)
