@@ -230,25 +230,20 @@ class EarlyQuintessence(Quintessence):
 
 
 @fortran_class
-class QuintessenceSpline(Quintessence):
+class QuintessenceInterp(Quintessence):
     r"""
-    Quintessence Models
-
+    Quintessence Models with an interpolated potential and its derivatives.
     """
 
     _fields_ = [
-        ("nspline", c_int, "npoints for spline"),
         ("phi_train", AllocatableArrayDouble, "nodes for spline interpolation of VofPhi"),
         ("V_train", AllocatableArrayDouble, "potential V(phi) at nodes"),
-        ("lengthscale", c_double, "length scale for spline interpolation of VofPhi"),
-        ("V_star", c_double, "VofPhi at final training point, used for prediction"),
+        ("dV_train", AllocatableArrayDouble, "dV/dphi at nodes"),
+        ("ddV_train", AllocatableArrayDouble, "d^2V/dphi^2 at nodes"),
         ("V0", c_double, "Overall potential amplitude "
                         " used for tuning to get correct DE density today"),
         ("theta_i", c_double, "phi_init initial field value"),
         ("frac_lambda0", c_double, "fraction of dark energy in cosmological constant today"),
-        # ("use_zc", c_bool, "solve for f, m to get specific critical reshift zc and fde_zc"),
-        # ("zc", c_double, "reshift of peak fractional early dark energy density"),
-        # ("fde_zc", c_double, "fraction of early dark energy density to total at peak"),
         ("npoints", c_int, "number of points for background integration spacing"),
         ("min_steps_per_osc", c_int, "minimumum number of steps per background oscillation scale"),
         ("fde", AllocatableArrayDouble, "after initialized, the calculated background early dark energy "
@@ -257,49 +252,22 @@ class QuintessenceSpline(Quintessence):
         ("omega_tol", c_double, "tolerance for omega_DE tuning"),
         ("atol", c_double, "scale factor ")
     ] # type: ignore
-    _fortran_class_name_ = 'TQuintessenceSpline'
+    _fortran_class_name_ = 'TQuintessenceInterp'
 
-    def set_params(self, nspline=4,phi_train=None, V_train=None, lengthscale=0.1,V_star=0.8260998715675062,
-                   V0=1e-8, theta_i=0.0,frac_lambda0=0.,do_ordering=False):
+    def set_params(self, phi_train=None, V_train=None, dV_train=None, ddV_train=None,
+                    V0=1e-8, theta_i=0.0, frac_lambda0=0.):
+
         if len(phi_train) != len(V_train):
             raise ValueError("phi_train and V_train must have the same length")
-        if len(phi_train) != nspline:
-            raise ValueError("phi_train and V_train must have length equal to nspline")
-        self.nspline = nspline
+
+        print(f"Received {len(phi_train)} training points for V(phi) interpolation.")
         self.phi_train = np.ascontiguousarray(phi_train, dtype=np.float64)
         self.V_train = np.ascontiguousarray(V_train, dtype=np.float64)
-        self.lengthscale = lengthscale
-        self.V_star = V_star
+        self.dV_train = np.ascontiguousarray(dV_train, dtype=np.float64)
+        self.ddV_train = np.ascontiguousarray(ddV_train, dtype=np.float64)
         self.V0 = V0
         self.theta_i = theta_i
-        # self.do_ordering = do_ordering
         self.frac_lambda0 = frac_lambda0
-        # self.use_zc = use_zc
-
-    #     if do_ordering:
-    #         self.order_transform()
-
-    # def order_transform(self,phi_train,V_train,phimin=0.,phimax=0.4,Vmin=-2.,Vmax=0.):
-    #     free_phis = np.array([self.phi2, self.phi3])
-    #     n = np.size(free_phis, axis=-1)
-    #     index = np.arange(n)
-    #     inner_term = np.power(1 - free_phis, 1/(n - index))
-    #     free_phis = 1 - np.cumprod(inner_term, axis=-1)
-    #     free_phis = free_phis * (phimax - phimin) + phimin
-
-    #     free_Vs = np.array([self.V2, self.V3, self.V4])
-    #     n = np.size(free_Vs, axis=-1)
-    #     index = np.arange(n)
-    #     inner_term = np.power(1 - free_Vs, 1/(n - index))
-    #     free_Vs = 1 - np.cumprod(inner_term, axis=-1)
-    #     free_Vs = free_Vs * (Vmax - Vmin) + Vmin
-
-    #     self.phi2 = free_phis[0]
-    #     self.phi3 = free_phis[1]
-    #     self.V2 = free_Vs[0]
-    #     self.V3 = free_Vs[1]
-    #     self.V4 = free_Vs[2]
-
 
 # short names for models that support w/wa
 F2003Class._class_names.update({"fluid": DarkEnergyFluid, "ppf": DarkEnergyPPF})

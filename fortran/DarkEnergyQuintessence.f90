@@ -24,7 +24,7 @@
     use constants
     use classes
     use Interpolation
-    use GaussianPotential
+    use PotentialInterpolator, only: PotentialInterpolator1D
     implicit none
     private
 
@@ -81,40 +81,35 @@
     procedure :: calc_zc_fde
     end type TEarlyQuintessence
 
-    type, extends(TQuintessence) :: TQuintessenceSpline ! adding a new class for the pure exponential potential
-        integer :: nspline = 4 !number of points in spline
-        ! real(dl) :: phimin = 0_dl
-        ! real(dl) :: phimax = 1_dl !range of phi for spline
+    type, extends(TQuintessence) :: TQuintessenceInterp ! new class for the interpolated potential
         real(dl), dimension(:), allocatable :: phi_train
         real(dl), dimension(:), allocatable :: V_train
-        real(dl) :: lengthscale = 0.5_dl !length scale for RBF kernel
-        real(dl) :: V_star = 0.8260998715675062_dl ! V Value at final training point
+        real(dl), dimension(:), allocatable :: dV_train
+        real(dl), dimension(:), allocatable :: ddV_train
         real(dl) :: V0 = 1e-8 !m in reduced Planck mass units
         real(dl) :: theta_i = 0.0_dl !initial field value
         real(dl) :: frac_lambda0 = 0._dl !fraction of dark energy density that is cosmological constant today
         integer :: npoints = 5000 !baseline number of log a steps; will be increased if needed when there are oscillations
-        integer :: min_steps_per_osc = 10
+        integer :: min_steps_per_osc = 5
         real(dl), dimension(:), allocatable :: fde, ddfde
-        real(dl) :: omega_tol = 1d-5 !tolerance for OmegaDE
+        real(dl) :: omega_tol = 1d-6 !tolerance for OmegaDE
         real(dl) :: atol = 1e-8_dl
-        type(GP_logVprime_RBF_type) :: gp
+        type(PotentialInterpolator1D) :: V_interpolator
+        type(PotentialInterpolator1D) :: dV_interpolator
+        type(PotentialInterpolator1D) :: ddV_interpolator
     contains
-    procedure :: Vofphi => TQuintessenceSpline_VofPhi
-    procedure :: Init => TQuintessenceSpline_Init
-    procedure :: ReadParams =>  TQuintessenceSpline_ReadParams
-    ! procedure, nopass :: order_transform
-    procedure, nopass :: PythonClass => TQuintessenceSpline_PythonClass
-    procedure, nopass :: SelfPointer => TQuintessenceSpline_SelfPointer
-    ! procedure, private :: fdeAtaQ
-    ! procedure, private :: fde_peakQ
+    procedure :: Vofphi => TQuintessenceInterp_VofPhi
+    procedure :: Init => TQuintessenceInterp_Init
+    procedure :: ReadParams =>  TQuintessenceInterp_ReadParams
+    procedure, nopass :: PythonClass => TQuintessenceInterp_PythonClass
+    procedure, nopass :: SelfPointer => TQuintessenceInterp_SelfPointer
     procedure, private :: check_errorQ
-    ! procedure :: calc_zc_fdeQ
 
-    end type TQuintessenceSpline
+    end type TQuintessenceInterp
 
     procedure(TClassDverk) :: dverk
 
-    public TQuintessence, TEarlyQuintessence,TQuintessenceSpline
+    public TQuintessence, TEarlyQuintessence,TQuintessenceInterp
     contains
 
     function VofPhi(this, phi, deriv)
@@ -798,53 +793,33 @@
     end subroutine TEarlyQuintessence_SelfPointer
 
 
-!   ! Quintessence spline model
+!   ! Quintessence interpolation model
 
-    function TQuintessenceSpline_VofPhi(this, phi, deriv) result(Vout)
+    function TQuintessenceInterp_VofPhi(this, phi, deriv) result(Vout)
     !The input variable phi is sqrt(8*Pi*G)*psi
     !Returns (8*Pi*G)^(1-deriv/2)*d^{deriv}V(psi)/d^{deriv}psi evaluated at psi
     !return result is in 1/Mpc^2 units [so times (Mpc/c)^2 to get units in 1/Mpc^2]
-    class(TQuintessenceSpline) :: this
+    class(TQuintessenceInterp) :: this
     real(dl) :: phi
     integer :: deriv
     real(dl) :: Vout
-    ! real(dl) :: logV, dlogV, ddlogV
-
-    !! GP for Log-dV/dphi
-
-    ! if (phi<0._dl) then
-    !     ! phi = -phi
-    !     Vout = 0.0_dl
-    !     return
-    !     ! Reflect potential around phi=0
-    !     ! logV  = this%gp%V(-phi)      ! = ln V(phi)
-    !     ! dlogV  = this%gp%Vd(-phi)     ! = d/dphi [ln V(phi)]
-    !     ! ddlogV = this%gp%Vdd(-phi)
-    ! end if
-
-    ! GP for Log-Potential
-    ! Evaluate log-potential GP and its derivatives:
-    ! logV  = this%gp%V(phi)      ! = ln V(phi)
-    ! dlogV  = this%gp%Vd(phi)     ! = d/dphi [ln V(phi)]
-    ! ddlogV = this%gp%Vdd(phi)    ! = d2/dphi2 [ln V(phi)]
 
     select case(deriv)
       case (0)
-        Vout = this%V0 * this%gp%V(phi) !this%V0 * exp(logV) !
+        Vout = this%V0 * this%V_interpolator%interpolate(phi)
       case (1)
-        Vout = this%V0 * this%gp%Vd(phi) !this%V0 * exp(logV) * dlogV
+        Vout = this%V0 * this%dV_interpolator%interpolate(phi)
       case (2)
-        Vout = this%V0 * this%gp%Vdd(phi)  !this%V0 * exp(logV) *(dlogV + ddlogV**2)  !this%gp%Vdd(phi)       ! calls SplinePotential%Vdd
+        Vout = this%V0 * this%ddV_interpolator%interpolate(phi)
       case default
-        stop 'Invalid deriv in spline VofPhi'
+        stop 'Invalid deriv in interpolated VofPhi'
       end select
     !   convert to 1/Mpc^2 units as before
-  end function TQuintessenceSpline_VofPhi
+  end function TQuintessenceInterp_VofPhi
 
-    subroutine TQuintessenceSpline_Init(this, State)
+    subroutine TQuintessenceInterp_Init(this, State)
     use Powell
-    ! use GaussianPotential
-    class(TQuintessenceSpline), intent(inout) :: this
+    class(TQuintessenceInterp), intent(inout) :: this
     class(TCAMBdata), intent(in), target :: State
     real(dl) aend, afrom
     integer, parameter ::  NumEqs=2
@@ -863,104 +838,12 @@
     real(dl) log_params(2), param_min(2), param_max(2)
     ! real(dl), allocatable :: phi_train_use(:), V_train_use(:)
 
-    if (FeedbackLevel > 0) then
-        write (*,*) 'Using Phi train and V train values = ', this%phi_train, this%V_train
-    end if
 
-    call this%gp%init(this%phi_train,this%V_train,this%lengthscale,this%V_star)
+    call this%V_interpolator%init(this%phi_train,this%V_train)
+    call this%dV_interpolator%init(this%phi_train,this%dV_train)
+    call this%ddV_interpolator%init(this%phi_train,this%ddV_train)
 
-    ! ! print phi_train, V_train
-    ! if (FeedbackLevel > 1) then
-    !     write (*,'(A)') 'Initializing spline potential with phi_train, V_train, lengthscale'
-    !     write (*,*) ' Nspline = ', this%nspline
-    !     write (*,*) ' phi_train',  phi_train
-    !     write (*,*) ' V_train', V_train
-    !     write (*,*) 'Lengthscale', this%lengthscale
-    ! end if
-
-    ! ! order the spline nodes if ordering is requested
-    ! if (this%do_ordering_phi) then
-    !     call this%order_transform(phi_train, ordered_phi_train, this%nspline,0.0_dl, 0.4_dl, .false.)
-    !     phi_train = ordered_phi_train
-    !     if (FeedbackLevel > 1) then
-    !         write (*,'(A)') 'After ordering phi_train'
-    !         write (*,*) ' phi_train',  ordered_phi_train
-    !     end if
-    ! end if
-    ! if (this%do_ordering_V) then
-    !     call this%order_transform(V_train, ordered_V_train, this%nspline,-2.0_dl, 0.0_dl, .true.)
-    !     ! do iter=1,this%nspline
-    !     V_train = ordered_V_train !10.0_dl**(ordered_V_train) ! !
-    !     ! end do
-    !     ! V_train = 10.0_dl**(ordered_V_train)
-    !     V_train(1) = this%V1
-    !     if (FeedbackLevel > 1) then
-    !         write (*,'(A)') 'After ordering V_train'
-    !         write (*,*) ' V_train', V_train
-    !     end if
-    ! end if
-
-
-    ! deallocate(ordered_phi_train, ordered_V_train, phi_train, V_train)
-
-    ! allocate(test_V_values(100), test_phi_values(100))
-
-    ! do iter=1,100
-    !     test_phi_values(iter) = phi_train(1) + (iter-1) *(phi_train(1) - phi_train(this%nspline)) / (99.0_dl)   ! test phi at training points
-    !     test_V_values(iter) = this%VofPhi(test_phi_values(iter),0) / this%V0 ! test VofPhi at training points
-    ! end do
-
-    ! do iter=2,100
-    !     if (test_V_values(iter) > test_V_values(iter-1)) then
-    !         ! write(*,*) 'TQuintessenceSpline_VofPhi: VofPhi not monotonic at phi = ', test_phi_values(iter), ' Vout = ', test_V_values(iter)
-    !         global_error_flag = error_darkenergy
-    !         global_error_message= 'TQuintessenceSpline_VofPhi: VofPhi not monotonic'
-    !         call GlobalError(global_error_message, global_error_flag)
-    !         call MpiStop(global_error_message)
-    !         ! return
-    !     end if
-    !     ! test_V_values(iter) = this%VofPhi(0.5_dl * ((iter-1)/99.0_dl), 1)
-    !     ! if (test_V_values(iter) > 0._dl) then
-    !     !     ! write(*,*) 'TQuintessenceSpline_VofPhi: VofPhi negative at phi = ', 0.5_dl * ((iter-1)/50.0_dl), ' Vout = ', test_V_values(iter)
-    !     !     global_error_flag = error_darkenergy
-    !     !     global_error_message= 'TQuintessenceSpline_VofPhi: dVofPhi positive'
-    !     !     return
-    !     !     ! error stop 'VofPhi negative'
-    !     !     ! test_V_values(iter) = 0.0_dl
-    !     ! end if
-    ! end do
-
-    ! if (FeedbackLevel > 1) then
-    !     write (*,'(A)') 'Testing spline potential VofPhi at phi_train'
-    !     write (*,*) ' test_V_values', test_V_values
-    ! end if
-
-    ! allocate(phi_train_use(2 * this%nspline - 1), V_train_use(2 * this%nspline - 1))
-
-    ! phi_train_use(this%nspline) = phi_train(1)
-    ! V_train_use(this%nspline) = V_train(1)
-
-    ! do iter=1,this%nspline-1
-    !     phi_train_use(this%nspline - iter) = -phi_train(iter+1)
-    !     phi_train_use(this%nspline + iter) = phi_train(iter+1)
-    !     V_train_use(this%nspline - iter) = V_train(iter+1)
-    !     V_train_use(this%nspline + iter) = V_train(iter+1)
-    ! end do
-
-
-    ! if (FeedbackLevel > 0) then
-    !     write (*,'(A)') 'Symmetric phi_train, V_train for spline potential'
-    !     write (*,*) ' ordered_phi_train_use',  phi_train_use
-    !     write (*,*) ' ordered_V_train_use', V_train_use
-    ! end if
-
-    ! call this%gp%init(phi_train_use, V_train_use, this%lengthscale)
-
-    !     call this%gp%init(ordered_phi_train(1:this%nspline),ordered_V_train(1:this%nspline),this%lengthscale)
-    ! else
-    !      call this%gp%init(phi_train(1:this%nspline),V_train(1:this%nspline),this%lengthscale)
-    ! end if
-
+    ! write(*,*) 'Initialized Quintessence interpolation with points from ', this%phi_train(1), ' to ', this%phi_train(this%V_interpolator%npoints)
 
     !Make interpolation table, etc,
     !At this point massive neutrinos have been initialized
@@ -992,37 +875,6 @@
     if (FeedbackLevel > 0) write(*,*) 'Omega_DE from scalar field IC = ',om1
     if (FeedbackLevel > 0) write(*,*) 'Omega_DE tolerance = ',this%omega_tol
     if (FeedbackLevel > 0) write(*,*) 'Omega_DE required = ',this%State%Omega_de
-
-    ! --------------- method 1 for initial conditions tuning V0 ------------------------------
-    ! if (abs(om1-this%State%Omega_de)>this%omega_tol) then
-    !     OK = .false.
-    !     if (FeedbackLevel > 0) write (*,*) 'initial scf values do not give correct field evolution, adjusting V0, diff = ', abs(om1-this%State%Omega_de)
-    !     do iter=1,150 ! this method works but we can make our search more robust by using the BOBYQA or NEWUOA minimizers
-    !         logV0_in = log10(this%V0)
-    !         this%V0 = 10**(0.5_dl * log10(this%State%Omega_de/om1) + logV0_in)
-    !         om1 = this%GetOmegaFromInitial(astart,initial_phi,initial_phidot,atol)
-    !         if (FeedbackLevel > 1) write (*,*) 'new V0 = ',this%V0
-    !         if (FeedbackLevel > 1) write(*,*) 'diff Omega_DE = ', abs(om1-this%State%Omega_de)
-    !         if (abs(om1-this%State%Omega_de)>this%omega_tol) then
-    !             OK = .false.
-    !         else
-    !             OK = .true.
-    !             exit
-    !         end if
-    !     end do
-    !     if (FeedbackLevel > 0) write(*,*) 'Search for new V0 converged = ',OK
-    !     if (FeedbackLevel > 1) write(*,*) 'Difference between new and required Omega_DE = ', abs(om1-this%State%Omega_de)
-    !     if (FeedbackLevel > 1) write (*,'(A, ES10.2)') 'new V0 from old method = ',this%V0
-    !     if (FeedbackLevel > 1) write(*,*) 'Omega_DE from scalar field with adjusted V0 is ',om1
-    !     ! amk - DO WE NEED TO CHANGE this%State%Omega_de to the new value
-    ! else
-    !     OK = .true.
-    ! end if
-
-    ! if (.not. OK) stop 'Search for good intial conditions did not converge' !this shouldn't happen ! Here we need to raise a CAMBerror so that cobaya assigns point -inf loglikelihood
-
-    ! --------------- method 1 for initial conditions tuning V0 End ------------------------------
-
 
     ! --------------- method 2 for initial conditions tuning V0 using Binary search ------------------------------
     ! this%V0 = 1d-6
@@ -1172,37 +1024,16 @@
 
     call spline(this%sampled_a,this%phi_a,tot_points,splZero,splZero,this%ddphi_a)
     call spline(this%sampled_a,this%phidot_a,tot_points,splZero,splZero,this%ddphidot_a)
-    ! call spline(this%sampled_a,this%fde,tot_points,splZero,splZero,this%ddfde)
-    ! has_peak = .false.
-    ! if (max_ix >0) then
-    !     ix = max_ix
-    !     has_peak = this%fde_peak(a_c, this%sampled_a(ix), this%sampled_a(ix+1), this%fde(ix), &
-    !         this%fde(ix+1), this%ddfde(ix), this%ddfde(ix+1))
-    !     if (.not. has_peak) then
-    !         has_peak = this%fde_peak(a_c, this%sampled_a(ix-1), this%sampled_a(ix), &
-    !             this%fde(ix-1), this%fde(ix), this%ddfde(ix-1), this%ddfde(ix))
-    !     end if
-    ! end if
-    ! if (has_peak) then
-    !     this%zc = 1/a_c-1
-    !     this%fde_zc = this%fdeAta(a_c)
-    ! else
-    !     if (this%DebugLevel>0) write(*,*) 'TEarlyQuintessence: NO PEAK '
-    !     this%zc = -1
-    ! end if
-    ! if (this%DebugLevel>0) then
-    !     write(*,*) 'TEarlyQuintessence zc, fde used', this%zc, this%fde_zc
-    ! end if
 
-    end subroutine TQuintessenceSpline_Init
+    end subroutine TQuintessenceInterp_Init
 
     logical function check_errorQ(this, afrom, aend)
-    class(TQuintessenceSpline) :: this
+    class(TQuintessenceInterp) :: this
     real(dl) afrom, aend
 
     if (global_error_flag/=0) then
         if (FeedbackLevel > 0) then
-            write(*,*) 'TQuintessenceSpline error in integration'
+            write(*,*) 'TQuintessenceInterp error in integration'
             write(*,*) 'afrom, aend = ', afrom, aend
             write(*,*) 'V0, theta_i = ', this%V0, this%theta_i
             write(*,*) 'Error flag = ', global_error_flag
@@ -1215,208 +1046,33 @@
     check_errorQ= .true.
     end function check_errorQ
 
-    ! logical function fde_peak(this, peak, xlo, xhi, Flo, Fhi, ddFlo, ddFhi)
-    ! class(TEarlyQuintessence) :: this
-    ! real(dl), intent(out) :: peak
-    ! real(dl) Delta
-    ! real(dl), intent(in) :: xlo, xhi, ddFlo, ddFhi,Flo, Fhi
-    ! real(dl) a, b, c, fac
-
-    ! !See if derivative has zero in spline interval xlo .. xhi
-
-    ! Delta = xhi - xlo
-
-    ! a = 0.5_dl*(ddFhi-ddFlo)/Delta
-    ! b = (xhi*ddFlo-xlo*ddFhi)/Delta
-    ! c = (Fhi-Flo)/Delta+ Delta/6._dl*((1-3*xhi**2/Delta**2)*ddFlo+(3*xlo**2/Delta**2-1)*ddFhi)
-    ! fac = b**2-4*a*c
-    ! if (fac>=0) then
-    !     fac = sqrt(fac)
-    !     peak = (-b + fac)/2/a
-    !     if (peak >= xlo .and. peak <= xhi) then
-    !         fde_peak = .true.
-    !         return
-    !     else
-    !         peak = (-b - fac)/2/a
-    !         if (peak >= xlo .and. peak <= xhi) then
-    !             fde_peak = .true.
-    !             return
-    !         end if
-    !     end if
-    ! end if
-    ! fde_peak = .false.
-
-    ! end function fde_peak
-
-    ! function match_zc(this, logm)
-    ! class(TEarlyQuintessence), intent(inout) :: this
-    ! real(dl), intent(in) :: logm
-    ! real(dl) match_zc, zc, fde_zc
-
-    ! this%m = exp(logm)
-    ! call this%calc_zc_fde(zc, fde_zc)
-    ! match_zc = zc - this%zc
-
-    ! end function match_zc
-
-    ! function match_fde(this, logf)
-    ! class(TEarlyQuintessence), intent(inout) :: this
-    ! real(dl), intent(in) :: logf
-    ! real(dl) match_fde, zc, fde_zc
-
-    ! this%f = exp(logf)
-    ! call this%calc_zc_fde(zc, fde_zc)
-    ! match_fde = fde_zc - this%fde_zc
-
-    ! end function match_fde
-
-    ! function match_fde_zc(this, x)
-    ! class(TEarlyQuintessence) :: this
-    ! real(dl), intent(in) :: x(:)
-    ! real(dl) match_fde_zc, zc, fde_zc
-
-    ! this%f = exp(x(1))
-    ! this%m = exp(x(2))
-    ! call this%calc_zc_fde(zc, fde_zc)
-
-    ! match_fde_zc = (log(this%fde_zc)-log(fde_zc))**2 + (log(zc)-log(this%zc))**2
-    ! if (this%DebugLevel>1) then
-    !     write(*,*) 'search f, m, zc, fde_zc, chi2', this%f, this%m, zc, fde_zc, match_fde_zc
-    ! end if
-
-    ! end function match_fde_zc
-
-    ! subroutine calc_zc_fdeQ(this, z_c, fde_zc)
-    ! class(TQuintessenceSpline), intent(inout) :: this
-    ! real(dl), intent(out) :: z_c, fde_zc
-    ! real(dl) aend, afrom
-    ! integer, parameter ::  NumEqs=2
-    ! real(dl) c(24),w(NumEqs,9), y(NumEqs)
-    ! integer ind, i, ix
-    ! real(dl), parameter :: splZero = 0._dl
-    ! real(dl) a_c
-    ! real(dl) initial_phi, initial_phidot, a2
-    ! real(dl), dimension(:), allocatable :: sampled_a, fde, ddfde
-    ! integer npoints, max_ix
-    ! logical has_peak
-    ! real(dl) a0, b0, da
-
-    ! ! Get z_c and f_de(z_c) where z_c is the redshift of (first) peak of f_de (de energy fraction)
-    ! ! Do this by forward propagating until peak, then get peak values by cubic interpolation
-
-    ! initial_phi = this%theta_i*this%f
-    ! this%log_astart = log(this%astart)
-    ! this%dloga = (-this%log_astart)/(this%npoints-1)
-
-    ! npoints = (-this%log_astart)/this%dloga + 1
-    ! allocate(sampled_a(npoints), fde(npoints), ddfde(npoints))
-
-    ! y(1)=initial_phi
-    ! initial_phidot =  this%astart*this%phidot_start(initial_phi)
-    ! y(2)= initial_phidot*this%astart**2
-    ! sampled_a(1)=this%astart
-    ! max_ix =0
-    ! ind=1
-    ! afrom=this%log_astart
-    ! do i=1, npoints-1
-    !     aend = this%log_astart + this%dloga*i
-    !     ix = i+1
-    !     sampled_a(ix)=exp(aend)
-    !     a2 = sampled_a(ix)**2
-    !     call dverk(this,NumEqs,EvolveBackgroundLog,afrom,y,aend,this%integrate_tol,ind,c,NumEqs,w)
-    !     if (.not. this%check_error(exp(afrom), exp(aend))) return
-    !     call EvolveBackgroundLog(this,NumEqs,aend,y,w(:,1))
-    !     fde(ix) = 1/((this%state%grho_no_de(sampled_a(ix)) +  this%frac_lambda0*this%State%grhov*a2**2) &
-    !         /((0.5d0*y(2)**2/a2 + a2**2*this%Vofphi(y(1),0))) + 1)
-    !     if (max_ix==0 .and. ix > 2 .and. fde(ix)< fde(ix-1)) then
-    !         max_ix = ix-1
-    !     end if
-    !     if (max_ix/=0 .and. ix > max_ix+4) exit
-    ! end do
-
-    ! call spline(sampled_a,fde,ix,splZero,splZero,ddfde)
-    ! has_peak = .false.
-    ! if (max_ix >0) then
-    !     has_peak = this%fde_peak(a_c, sampled_a(max_ix), sampled_a(max_ix+1), fde(max_ix), &
-    !         fde(max_ix+1), ddfde(max_ix), ddfde(max_ix+1))
-    !     if (.not. has_peak) then
-    !         has_peak = this%fde_peak(a_c, sampled_a(max_ix-1), sampled_a(max_ix), &
-    !             fde(max_ix-1), fde(max_ix), ddfde(max_ix-1), ddfde(max_ix))
-    !     end if
-    ! end if
-    ! if (has_peak) then
-    !     z_c = 1/a_c-1
-    !     ix = int((log(a_c)-this%log_astart)/this%dloga)+1
-    !     da = sampled_a(ix+1) - sampled_a(ix)
-    !     a0 = (sampled_a(ix+1) - a_c)/da
-    !     b0 = 1 - a0
-    !     fde_zc=b0*fde(ix+1) + a0*(fde(ix)-b0*((a0+1)*ddfde(ix)+(2-a0)*ddfde(ix+1))*da**2/6._dl)
-    ! else
-    !     write(*,*) 'calc_zc_fde: NO PEAK'
-    !     z_c = -1
-    !     fde_zc = 0
-    ! end if
-
-    ! end subroutine calc_zc_fdeQ
-
-    ! function fdeAtaQ(this,a)
-    ! class(TQuintessenceSpline) :: this
-    ! real(dl), intent(in) :: a
-    ! real(dl) fdeAtaQ, aphi, aphidot, a2
-
-    ! call this%ValsAta(a, aphi, aphidot)
-    ! a2 = a**2
-    ! fdeAtaQ = 1/((this%state%grho_no_de(a) +  this%frac_lambda0*this%State%grhov*a2**2) &
-    !     /(a2*(0.5d0* aphidot**2 + a2*this%Vofphi(aphi,0))) + 1)
-    ! end function fdeAtaQ
-
-    subroutine TQuintessenceSpline_ReadParams(this, Ini)
+    subroutine TQuintessenceInterp_ReadParams(this, Ini)
+    ! This is not to be used, always initialize from python
     use IniObjects
-    class(TQuintessenceSpline) :: this
+    class(TQuintessenceInterp) :: this
     class(TIniFile), intent(in) :: Ini
 
     call this%TDarkEnergyModel%ReadParams(Ini)
-    ! this%nspline = Ini%Read_Int('nspline', 4)
-    ! this%do_ordering_phi = Ini%Read_Logical('do_ordering_phi', .true.)
-    ! this%do_ordering_V = Ini%Read_Logical('do_ordering_V', .true.)
-    ! ! this%phimin = Ini%Read_Double('phimin', 0.d0)
-    ! ! this%phimax = Ini%Read_Double('phimax', 1.d0)
-    ! this%V0 = Ini%Read_Double('V0', 1d-8)
-    ! this%theta_i = Ini%Read_Double('theta_i',0.d0)
-    ! this%phi1 = Ini%Read_Double('phi1', 0.1d0)
-    ! this%phi2 = Ini%Read_Double('phi2', 0.2d0)
-    ! this%phi3 = Ini%Read_Double('phi3', 0.3d0)
-    ! this%phi4 = Ini%Read_Double('phi4', 0.4d0)
-    ! ! this%phi5 = Ini%Read_Double('phi5', 0.5d0)
-    ! ! this%phi6 = Ini%Read_Double('phi6', 0.6d0)
-    ! this%V1 = Ini%Read_Double('V1', 0.1d0)
-    ! this%V2 = Ini%Read_Double('V2', 0.2d0)
-    ! this%V3 = Ini%Read_Double('V3', 0.3d0)
-    ! this%V4 = Ini%Read_Double('V4', 0.4d0)
-    ! ! this%V5 = Ini%Read_Double('V5', 0.5d0)
-    ! ! this%V6 = Ini%Read_Double('V6', 0.6d0)
-    ! this%lengthscale = Ini%Read_Double('lengthscale', 0.5_dl)
-
-    end subroutine TQuintessenceSpline_ReadParams
+    end subroutine TQuintessenceInterp_ReadParams
 
 
-    function TQuintessenceSpline_PythonClass()
-    character(LEN=:), allocatable :: TQuintessenceSpline_PythonClass
+    function TQuintessenceInterp_PythonClass()
+    character(LEN=:), allocatable :: TQuintessenceInterp_PythonClass
 
-    TQuintessenceSpline_PythonClass = 'QuintessenceSpline'
+    TQuintessenceInterp_PythonClass = 'QuintessenceInterp'
 
-    end function TQuintessenceSpline_PythonClass
+    end function TQuintessenceInterp_PythonClass
 
-    subroutine TQuintessenceSpline_SelfPointer(cptr,P)
+    subroutine TQuintessenceInterp_SelfPointer(cptr,P)
     use iso_c_binding
     Type(c_ptr) :: cptr
-    Type (TQuintessenceSpline), pointer :: PType
+    Type (TQuintessenceInterp), pointer :: PType
     class (TPythonInterfacedClass), pointer :: P
 
     call c_f_pointer(cptr, PType)
     P => PType
 
-    end subroutine TQuintessenceSpline_SelfPointer
+    end subroutine TQuintessenceInterp_SelfPointer
 
 
 

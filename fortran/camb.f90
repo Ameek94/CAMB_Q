@@ -400,7 +400,7 @@
     endif
 
     !  Read initial parameters.
-    DarkEnergyModel = UpperCase(Ini%Read_String_Default('dark_energy_model', 'QuintessenceSpline')) ! added for phiphidot output
+    DarkEnergyModel = UpperCase(Ini%Read_String_Default('dark_energy_model', 'QuintessenceInterp')) ! added for phiphidot output
     if (allocated(P%DarkEnergy)) deallocate(P%DarkEnergy)
     if (DarkEnergyModel == 'FLUID') then
         allocate (TDarkEnergyFluid::P%DarkEnergy)
@@ -410,8 +410,8 @@
         allocate (TAxionEffectiveFluid::P%DarkEnergy)
     else if (DarkEnergyModel == 'EARLYQUINTESSENCE') then
         allocate (TEarlyQuintessence::P%DarkEnergy)
-    else if (DarkEnergyModel == 'QUINTESSENCESPLINE') then
-        allocate (TQuintessenceSpline::P%DarkEnergy)
+    else if (DarkEnergyModel == 'QUINTESSENCEINTERP') then
+        allocate (TQuintessenceInterp::P%DarkEnergy)
     else
         ErrMsg = 'Unknown dark energy model: '//trim(DarkEnergyModel)
         return

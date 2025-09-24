@@ -6,7 +6,7 @@ POWERSPECTRUM_FILES ?= InitialPower
 REIONIZATION_FILES ?= reionization
 RECOMBINATION_FILES ?= recfast
 NONLINEAR_FILES     ?= halofit SecondOrderPK
-DARKENERGY_FILES  ?= DarkEnergyFluid DarkEnergyPPF PowellMinimize splinepotential DarkEnergyQuintessence
+DARKENERGY_FILES  ?= DarkEnergyFluid DarkEnergyPPF PowellMinimize DarkEnergyPotentialInterp DarkEnergyQuintessence
 
 BISPECTRUM ?= SeparableBispectrum
 
@@ -53,7 +53,7 @@ FORUTILS_DIR ?= $(FORUTILSPATH)/$(OUTPUT_DIR)/
 python: FORUTILS_DIR=$(FORUTILSPATH)/$(DLL_DIR)/
 
 LIBLINK = -L"$(FORUTILS_DIR)" -lforutils
-	
+
 
 ## CosmoRec
 ifneq (,$(findstring cosmorec,$(RECOMBINATION_FILES)))
@@ -128,7 +128,7 @@ camb_fits: libforutils directories writefits.f90 $(CAMBOBJ) $(DRIVER).o
 		$(F90CRLINK) $(LIBLINK) $(HEALPIXLD) -DWRITE_FITS -o $@
 
 #../Makefile ../Makefile_main
-%.o: ../%.f90 compiler.ver 
+%.o: ../%.f90 compiler.ver
 	$(F90C) $(F90FLAGS) $(IFLAG)"$(FORUTILS_DIR)" -c $< -o $*.o
 
 directories:
@@ -151,7 +151,7 @@ clean:
 	-rm -rf Release* Debug* WinDLL*
 
 delete:
-	rm -f camb	
+	rm -f camb
 	rm -f ../camb/*.so
 
 ## CosmoRec make parts
