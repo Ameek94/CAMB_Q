@@ -857,14 +857,16 @@
     Type(TNEWUOA) :: Minimize
     real(dl) log_params(2), param_min(2), param_max(2)
 
+
+
     if (this%model_idx==4) then !Cosine, n = f
-        write (*,*)  'Cosine potential' ! = phi/f
+        if (FeedbackLevel > 0) write (*,*)  'Cosine potential' ! = phi/f
     elseif (this%model_idx==3) then !FT Hilltop, n = phi0
-        write (*,*)  'FT Hilltop' 
+        if (FeedbackLevel > 0) write (*,*)  'FT Hilltop' 
     elseif (this%model_idx==2) then !Sugra Hilltop, n = alpha
-        write (*,*)  'Sugra Hilltop' 
+        if (FeedbackLevel > 0) write (*,*)  'Sugra Hilltop' 
     elseif (this%model_idx==1) then !Exponential Quintessence, n = lambda
-        write (*,*)  'Exponential' 
+        if (FeedbackLevel > 0) write (*,*)  'Exponential' 
     else 
         stop 'Must provide a valid Quintessence model to use'
     end if
