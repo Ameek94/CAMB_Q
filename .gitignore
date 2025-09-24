@@ -38,3 +38,13 @@ Inspector/
 .ipynb_checkpoints
 camb/HighLExtrapTemplate_lenspotentialCls.dat
 .vscode/
+*.txt
+*.checkpoint
+*.covmat
+*.pdf
+*.h5
+*.progress
+*.minimum
+*.locked
+*.input.yaml
+*.updated.yaml
