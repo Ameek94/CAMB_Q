@@ -260,7 +260,7 @@ class QuintessenceInterp(Quintessence):
         if len(phi_train) != len(V_train):
             raise ValueError("phi_train and V_train must have the same length")
 
-        print(f"Received {len(phi_train)} training points for V(phi) interpolation.")
+        # print(f"Received {len(phi_train)} training points for V(phi) interpolation.")
         self.phi_train = np.ascontiguousarray(phi_train, dtype=np.float64)
         self.V_train = np.ascontiguousarray(V_train, dtype=np.float64)
         self.dV_train = np.ascontiguousarray(dV_train, dtype=np.float64)
