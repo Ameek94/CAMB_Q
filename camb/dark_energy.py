@@ -228,6 +228,201 @@ class EarlyQuintessence(Quintessence):
             self.zc = zc
             self.fde_zc = fde_zc
 
+import sympy
+import numpy as np
+from scipy.interpolate import InterpolatedUnivariateSpline
+
+def is_function_valid(func_string: str) -> bool:
+    """
+    More robustly analyzes a function string to determine if it's valid.
+    """
+    # 1. Check for obviously invalid substrings
+    invalid_substrings = ['nan', 'oo', '<class'] # 'I' is sympy for imaginary unit
+    if any(sub in func_string.lower() for sub in invalid_substrings):
+        print(f"Validation failed: Function '{func_string}' contains invalid substring.")
+        return False
+
+    try:
+        # 2. Parse and check for dependency on 'x'
+        x = sympy.symbols('x')
+        # We don't need the 'a' symbols for this check
+        locs = {'x': x, 'sin': sympy.sin, 'cos': sympy.cos, 'inv': lambda v: 1/v,
+                'Abs': sympy.Abs, 'pow': sympy.Pow, 'exp': sympy.exp, 'log': sympy.log}
+        expr = sympy.sympify(func_string, locals=locs)
+
+        # 3. If 'x' is not a free symbol, the function is constant and thus invalid
+        if x not in expr.free_symbols:
+            print(f"Validation failed: Function '{func_string}' is constant with respect to x.")
+            return False
+
+    except Exception as e:
+        print(f"Validation failed: Could not parse function '{func_string}'. Error: {e}")
+        return False
+
+    return True
+
+def identify_fixed_and_variable_parameters(expr_template, param_symbols):
+    """
+    Analyzes a sympy expression to separate its parameters into 'fixed'
+    (purely additive constants) and 'variable' (all others).
+
+    A parameter 'a_i' is classified as 'fixed' if and only if the partial
+    derivative of the expression with respect to 'a_i' is exactly 1.
+
+    If any part of the symbolic analysis fails, it safely defaults to
+    classifying ALL parameters as variable.
+
+    Args:
+        expr_template (sympy.Expr): The symbolic expression for the potential.
+        param_symbols (list): A list of the sympy symbols for the parameters (a0, a1...).
+
+    Returns:
+        tuple[list[str], list[str]]: A tuple containing two lists:
+                                     1. The names of parameters to be fixed.
+                                     2. The names of parameters to be treated as variable.
+    """
+    # Convert all symbols to a set of strings for easy processing
+    all_param_names = {str(p) for p in param_symbols}
+    x = sympy.symbols('x')
+
+    # try:
+    #     params_to_fix = set()
+    #     # Loop to identify the fixed parameters
+    #     for param in param_symbols:
+    #         derivative = sympy.diff(expr_template, param)
+    #         print(f"Symbols in derivative: {derivative.free_symbols}")
+    #         print(f"Derivative with respect to {param}: {derivative}")
+
+    #         # The parameter is a purely additive constant if its derivative
+    #         # has no dependency on 'x'.
+    #         if not derivative.has(x):
+    #             params_to_fix.add(str(param))
+
+    #         # The parameter is a purely additive constant ONLY if the derivative is 1
+    #         # if derivative == 1:
+    #         #     params_to_fix.add(str(param))
+
+    #     # The variable parameters are all parameters MINUS the fixed ones
+    #     params_to_sample = all_param_names.difference(params_to_fix)
+
+    #     #convert to lists for return
+    #     params_to_fix = list(params_to_fix)
+    #     params_to_sample = list(params_to_sample)
+
+    #     print(f"Identified fixed parameters: {params_to_fix}, variable parameters: {params_to_sample}")
+
+    #     # Return sorted lists for a deterministic order
+    #     return sorted(list(params_to_fix)), sorted(list(params_to_sample))
+
+    # except Exception as e:
+    #     # If ANY part of the symbolic analysis fails, default to sampling everything
+    #     print(f"Warning: Symbolic analysis failed for expression '{expr_template}'. Error: {e}")
+    #     print("Defaulting to sampling all parameters for this function.")
+
+    #     # Return an empty list for fixed params, and all params as variable
+    return [], sorted(list(all_param_names))
+
+def load_esr_function_string(file_path, idx=0,verbose=False)-> dict:
+    try:
+        with open(file_path, "r") as f:
+            all_functions = [line.strip() for line in f.readlines() if line.strip()]
+            func_string = all_functions[idx]
+
+            is_valid = is_function_valid(func_string)
+
+            function_dict = {}
+
+            if not is_valid:
+                function_dict['valid'] = False
+                return function_dict
+
+
+            # 5.1. Convert the string to a sympy expression
+            x = sympy.symbols('x', real=True)
+            # Create parameter symbols a0, a1, a2, etc.
+            a_symbols = sympy.symbols([f'a{i}' for i in range(10)], real=True)
+
+            # Define locals for sympy to understand the function string
+            locs = {'x': x, 'sin': sympy.sin, 'cos': sympy.cos, 'inv': lambda x: 1/x,
+                    'Abs': sympy.Abs, 'pow': sympy.Pow, 'exp': sympy.exp, 'log': sympy.log}
+            # Add parameter symbols to locs
+            for j, a_sym in enumerate(a_symbols):
+                locs[f'a{j}'] = a_sym
+            # Parse the function string
+            expr_template = sympy.sympify(func_string, locals=locs)
+
+            # Check if the expression has any parameter symbols
+            param_symbols = [sym for sym in expr_template.free_symbols if str(sym).startswith('a')]
+
+            fixed_params, variable_params = identify_fixed_and_variable_parameters(expr_template, param_symbols)
+
+            if verbose:
+                print(f"Loaded ESR function: {func_string} with parameters: {[str(p) for p in param_symbols]}")
+
+            function_dict['valid'] = True
+            function_dict['func_string'] = func_string
+            function_dict['expr_template'] = expr_template
+            function_dict['param_symbols'] = param_symbols
+            function_dict['fixed_params'] = fixed_params
+            function_dict['variable_params'] = variable_params
+
+            return function_dict
+
+    except FileNotFoundError:
+        raise CAMBError(f"Could not find file with generated equations: {file_path}")
+
+def create_callable_function(expr_template, param_symbols, x_vals):
+    """Create a callable function for parameter evaluation"""
+    # print(f"Creating callable function for expression: {expr_template} with parameters: {[str(p) for p in param_symbols]}")
+    def objective(params):
+        # Substitute parameters into expression
+        substitutions = {param: params[i] for i, param in enumerate(param_symbols)}
+        expr_with_params = expr_template.subs(substitutions)
+
+        # Convert to callable and evaluate
+        callable_func = sympy.lambdify([sympy.Symbol('x')], expr_with_params, modules=['numpy'])
+        y_pred = callable_func(x_vals)
+        # print(f"Evaluated function with params {params}: {y_pred} at x={x_vals}")
+        return y_pred
+    return objective
+
+
+import sympy
+import numpy as np
+
+def create_potential_table(expr_template, param_symbols, param_vals, phi_vals):
+    """Create the potential table from the ESR /sympy expression and parameter values"""
+
+    print(f"Creating potential table for expression: {expr_template} with parameters: {[str(p) for p in param_symbols]}, param_vals: {param_vals}")
+
+    phi_padding = 1e-2
+    padded_phi_vals = np.concatenate((
+        np.array([phi_vals[0] - phi_padding]),
+        phi_vals,
+        np.array([phi_vals[-1] + phi_padding])
+    ))
+    function = create_callable_function(expr_template, param_symbols, padded_phi_vals)
+    log_V_vals = function(param_vals)
+    # print(f"Evaluated log_V_vals: {log_V_vals}")
+    V_vals = np.exp(log_V_vals)  # Ensure V(phi) > 0
+    # Check for invalid values
+    invalid_mask = np.logical_or(np.isinf(V_vals), np.isnan(V_vals))
+    if np.any(invalid_mask):
+        success = False
+        return {'success': success, 'phi_train': None, 'V_train': None, 'dV_train': None, 'ddV_train': None}
+    else:
+        success = True
+        # print(f"Shapes of phi and V: {padded_phi_vals.shape}, {V_vals.shape}")
+        logV_interpolator = InterpolatedUnivariateSpline(padded_phi_vals, log_V_vals)
+        dlogV_dphi = logV_interpolator.derivative(n=1)(phi_vals)
+        dV_dphi = dlogV_dphi * V_vals[1:-1]
+        ddV_dphi = V_vals[1:-1] * (logV_interpolator.derivative(n=2)(phi_vals) + dlogV_dphi**2)
+        invalid_mask_dV = np.logical_or(np.isinf(dV_dphi), np.isnan(dV_dphi))
+        invalid_mask_ddV = np.logical_or(np.isinf(ddV_dphi), np.isnan(ddV_dphi))
+        if np.any(invalid_mask_dV) or np.any(invalid_mask_ddV):
+            success = False
+        return {'success': success, 'phi_train': phi_vals, 'V_train': V_vals[1:-1], 'dV_train': dV_dphi, 'ddV_train': ddV_dphi}
+
 
 @fortran_class
 class QuintessenceInterp(Quintessence):
@@ -254,13 +449,32 @@ class QuintessenceInterp(Quintessence):
     ] # type: ignore
     _fortran_class_name_ = 'TQuintessenceInterp'
 
-    def set_params(self, phi_train=None, V_train=None, dV_train=None, ddV_train=None,
-                    V0=1e-8, theta_i=0.0, frac_lambda0=0.):
+    def set_params(self, esr_params=[], esr_file='',esr_potential_index=0, phi_min=-2, phi_max=2, n_phi=250,
+                   V0=1e-8, theta_i=0.0, frac_lambda0=0.):
 
-        if len(phi_train) != len(V_train):
-            raise ValueError("phi_train and V_train must have the same length")
+        function_dict = load_esr_function_string(esr_file, esr_potential_index)
+        # print(f"Loaded ESR function dictionary with potential index {esr_potential_index} from file {esr_file}: {function_dict}")
 
-        # print(f"Received {len(phi_train)} training points for V(phi) interpolation.")
+        if not function_dict['valid']:
+            raise CAMBError(f"ESR function at index {esr_potential_index} is invalid.")
+
+        esr_param_symbols = function_dict['param_symbols']
+        # esr_param_names = [str(p) for p in function_dict['param_symbols']]
+        # esr_function_string = function_dict['func_string']
+        esr_function_template = function_dict['expr_template']
+        phi_vals = np.linspace(phi_min, phi_max, n_phi)
+        potential_dict = create_potential_table(esr_function_template,
+                                                    esr_param_symbols,
+                                                    esr_params, phi_vals)
+        success = potential_dict['success']
+        if not success:
+            raise CAMBError("Failed to create a valid potential table from ESR function for the given esr parameters")
+
+        phi_train = potential_dict['phi_train']
+        V_train = potential_dict['V_train']
+        dV_train = potential_dict['dV_train']
+        ddV_train = potential_dict['ddV_train']
+
         self.phi_train = np.ascontiguousarray(phi_train, dtype=np.float64)
         self.V_train = np.ascontiguousarray(V_train, dtype=np.float64)
         self.dV_train = np.ascontiguousarray(dV_train, dtype=np.float64)
