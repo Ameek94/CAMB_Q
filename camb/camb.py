@@ -158,7 +158,9 @@ def set_params(cp=None, verbose=False, **params):
     used_params = set()
 
     def do_set(setter):
+        # print(f"Setting parameters for {setter.__name__}, {params}")
         kwargs = {kk: params[kk] for kk in getfullargspec(setter).args[1:] if kk in params}
+        # print(f"  kwargs: {kwargs}")
         used_params.update(kwargs)
         if kwargs:
             if verbose:

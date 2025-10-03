@@ -387,13 +387,12 @@ def create_callable_function(expr_template, param_symbols, x_vals):
     return objective
 
 
-import sympy
-import numpy as np
+# def exp_mapping(vals):
 
-def create_potential_table(expr_template, param_symbols, param_vals, phi_vals):
+def create_potential_table(expr_template, param_symbols, param_vals, phi_vals, positive_mapping='exp'):
     """Create the potential table from the ESR /sympy expression and parameter values"""
 
-    print(f"Creating potential table for expression: {expr_template} with parameters: {[str(p) for p in param_symbols]}, param_vals: {param_vals}")
+    # print(f"Creating potential table for expression: {expr_template} with parameters: {[str(p) for p in param_symbols]}, param_vals: {param_vals}")
 
     phi_padding = 1e-2
     padded_phi_vals = np.concatenate((
@@ -402,17 +401,29 @@ def create_potential_table(expr_template, param_symbols, param_vals, phi_vals):
         np.array([phi_vals[-1] + phi_padding])
     ))
     function = create_callable_function(expr_template, param_symbols, padded_phi_vals)
-    log_V_vals = function(param_vals)
-    # print(f"Evaluated log_V_vals: {log_V_vals}")
-    V_vals = np.exp(log_V_vals)  # Ensure V(phi) > 0
+    if positive_mapping=='exp':
+        vals = function(param_vals)
+        V_vals = np.exp(vals)  # Ensure V(phi) > 0
+        log_V_vals = vals
+    elif positive_mapping=='square':
+        vals = function(param_vals)
+        V_vals = vals**2  # Ensure V(phi) > 0
+        log_V_vals = np.log(V_vals + 1e-50)  # Avoid log(0)
+    else:
+        raise CAMBError(f"Unknown positive_mapping method: {positive_mapping}")
+
+    # log_V_vals = function(param_vals)
+    # # print(f"Evaluated log_V_vals: {log_V_vals}")
+    # if positive_mapping == 'exp':
+    # V_vals = np.exp(log_V_vals)  # Ensure V(phi) > 0
     # Check for invalid values
+
     invalid_mask = np.logical_or(np.isinf(V_vals), np.isnan(V_vals))
     if np.any(invalid_mask):
         success = False
         return {'success': success, 'phi_train': None, 'V_train': None, 'dV_train': None, 'ddV_train': None}
     else:
         success = True
-        # print(f"Shapes of phi and V: {padded_phi_vals.shape}, {V_vals.shape}")
         logV_interpolator = InterpolatedUnivariateSpline(padded_phi_vals, log_V_vals)
         dlogV_dphi = logV_interpolator.derivative(n=1)(phi_vals)
         dV_dphi = dlogV_dphi * V_vals[1:-1]
@@ -449,14 +460,25 @@ class QuintessenceInterp(Quintessence):
     ] # type: ignore
     _fortran_class_name_ = 'TQuintessenceInterp'
 
-    def set_params(self, esr_params=[], esr_file='',esr_potential_index=0, phi_min=-2, phi_max=2, n_phi=250,
+    def set_params(self, esr_param_a0 = None, esr_param_a1 = None, esr_param_a2 = None, esr_param_a3 = None,
+                    esr_functions_file='',esr_potential_index=0, phi_min=-2, phi_max=2, n_phi=250,
                    V0=1e-8, theta_i=0.0, frac_lambda0=0.):
 
-        function_dict = load_esr_function_string(esr_file, esr_potential_index)
-        # print(f"Loaded ESR function dictionary with potential index {esr_potential_index} from file {esr_file}: {function_dict}")
+        function_dict = load_esr_function_string(esr_functions_file, esr_potential_index)
+        # print(f"Loaded ESR function dictionary with potential index {esr_potential_index} from file {esr_functions_file}: {function_dict}")
 
         if not function_dict['valid']:
             raise CAMBError(f"ESR function at index {esr_potential_index} is invalid.")
+
+        esr_params = []
+        if esr_param_a0 is not None:
+            esr_params.append(esr_param_a0)
+        if esr_param_a1 is not None:
+            esr_params.append(esr_param_a1)
+        if esr_param_a2 is not None:
+            esr_params.append(esr_param_a2)
+        if esr_param_a3 is not None:
+            esr_params.append(esr_param_a3)
 
         esr_param_symbols = function_dict['param_symbols']
         # esr_param_names = [str(p) for p in function_dict['param_symbols']]
